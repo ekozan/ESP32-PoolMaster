@@ -33,6 +33,9 @@ void stack_mon(UBaseType_t&);
 void lockI2C();
 void unlockI2C();
 
+static bool i2c_analog_ok = false;   // Flag: ADS1115 found and initialized
+static bool i2c_pcf_ok    = false;   // Flag: PCF8574 found and initialized
+
 //Update loop for ADS1115 measurements
 // Some explanations: The sampling rate is set to 16sps in order to be sure that 
 // every 125ms (which is the period of the task) there is a sample available. As it takes 3ms to
@@ -52,6 +55,30 @@ void unlockI2C();
 //----------------------------
 void AnalogInit()
 {
+  bool ads_devices_ok = true;
+
+  // Check internal ADS1115
+  Wire.beginTransmission(ADS1115ADDRESS);
+  uint8_t err = Wire.endTransmission();
+  if (err != 0) {
+    Debug.print(DBG_ERROR, "ADS1115 int (0x%02x) not found on I2C bus (err=%d)", ADS1115ADDRESS, err);
+    ads_devices_ok = false;
+  }
+
+  // Check external ADS1115
+  Wire.beginTransmission(EXT_ADS1115_ADDR);
+  err = Wire.endTransmission();
+  if (err != 0) {
+    Debug.print(DBG_ERROR, "ADS1115 ext (0x%02x) not found on I2C bus (err=%d)", EXT_ADS1115_ADDR, err);
+    ads_devices_ok = false;
+  }
+
+  if (!ads_devices_ok) {
+    i2c_analog_ok = false;
+    return;
+  }
+
+  i2c_analog_ok = true;
   adc_int.setSpeed(ADS1115_SPEED_16SPS);
   adc_int.addChannel(ADS1115_CHANNEL2, ADS1115_RANGE_6144);
   adc_int.setSamples(8);
@@ -65,6 +92,11 @@ void AnalogInit()
 void AnalogPoll(void *pvParameters)
 {
   while (!startTasks) ;
+
+  if (!i2c_analog_ok) {
+    Debug.print(DBG_ERROR, "AnalogPoll: ADS1115 not available, task suspended");
+    vTaskSuspend(nullptr);
+  }
 
   TickType_t period = PT1;  
   TickType_t ticktime = xTaskGetTickCount(); 
@@ -125,6 +157,15 @@ void AnalogPoll(void *pvParameters)
 
 void AnalogInit()
 {
+  // Check ADS1115 presence on I2C bus
+  Wire.beginTransmission(ADS1115ADDRESS);
+  uint8_t err = Wire.endTransmission();
+  if (err != 0) {
+    Debug.print(DBG_ERROR, "ADS1115 (0x%02x) not found on I2C bus (err=%d)", ADS1115ADDRESS, err);
+    i2c_analog_ok = false;
+    return;
+  }
+  i2c_analog_ok = true;
   adc_int.setSpeed(ADS1115_SPEED_16SPS);
   adc_int.addChannel(ADS1115_CHANNEL0, ADS1115_RANGE_6144);
   adc_int.addChannel(ADS1115_CHANNEL1, ADS1115_RANGE_6144);
@@ -135,6 +176,11 @@ void AnalogInit()
 void AnalogPoll(void *pvParameters)
 {
   while (!startTasks) ;
+
+  if (!i2c_analog_ok) {
+    Debug.print(DBG_ERROR, "AnalogPoll: ADS1115 not available, task suspended");
+    vTaskSuspend(nullptr);
+  }
 
   TickType_t period = PT1;  
   TickType_t ticktime = xTaskGetTickCount(); 
@@ -250,6 +296,15 @@ void StatusLights(void *pvParameters)
   while (!startTasks) ;
   vTaskDelay(DT7);                                // Scheduling offset 
 
+  // Check PCF8574 presence
+  Wire.beginTransmission(PCF8574ADDRESS);
+  uint8_t pcf_err = Wire.endTransmission();
+  if (pcf_err != 0) {
+    Debug.print(DBG_ERROR, "PCF8574 (0x%02x) not found on I2C bus (err=%d), StatusLights task suspended", PCF8574ADDRESS, pcf_err);
+    vTaskSuspend(nullptr);
+  }
+  i2c_pcf_ok = true;
+
   TickType_t period = PT7;  
   TickType_t ticktime = xTaskGetTickCount();
   static UBaseType_t hwm = 0;
@@ -298,8 +353,11 @@ void StatusLights(void *pvParameters)
     lockI2C();
     Wire.beginTransmission(PCF8574ADDRESS);
     Wire.write(~status);
-    Wire.endTransmission();
+    uint8_t tx_err = Wire.endTransmission();
     unlockI2C();
+    if (tx_err != 0) {
+      Debug.print(DBG_WARNING, "PCF8574 I2C write error: %d", tx_err);
+    }
 
     #ifdef CHRONO
     t_act = millis() - td;
@@ -468,7 +526,7 @@ void OrpRegulation(void *pvParameters)
 }
 
 //Init DS18B20 one-wire library
-void TempInit()
+bool TempInit()
 {
   bool error = false;
   char buf[64];
@@ -525,6 +583,7 @@ void TempInit()
     sensors_W.setWaitForConversion(false);
     sensors_A.setWaitForConversion(false);
   }
+  return !error;
 }
 
 //Request temperature asynchronously
@@ -533,6 +592,11 @@ void getTemp(void *pvParameters)
 {
   while (!startTasks) ;
   vTaskDelay(DT4);                                // Scheduling offset 
+
+  if (sensors_W.getDeviceCount() == 0 && sensors_A.getDeviceCount() == 0) {
+    Debug.print(DBG_ERROR, "getTemp: no temperature sensor found, task suspended");
+    vTaskSuspend(nullptr);
+  }
 
   TickType_t period = PT4;  
   TickType_t ticktime = xTaskGetTickCount();
