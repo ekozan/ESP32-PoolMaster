@@ -358,6 +358,9 @@ void setup()
   // Start I2C for ADS1115 and status lights through PCF8574A
   Wire.begin(I2C_SDA,I2C_SCL);
 
+  // Create I2C sharing mutex FIRST, before any I2C access
+  mutex = xSemaphoreCreateMutex();
+
   // Init pH, ORP and PSI analog measurements
   AnalogInit();
 
@@ -369,7 +372,10 @@ void setup()
   // Clear status LEDs
   Wire.beginTransmission(PCF8574ADDRESS);
   Wire.write((uint8_t)0xFF);
-  Wire.endTransmission();
+  uint8_t pcf_init_err = Wire.endTransmission();
+  if (pcf_init_err != 0) {
+    Debug.print(DBG_WARNING, "PCF8574 not found during setup (err=%d)", pcf_init_err);
+  }
 
   // Initialize PIDs
   PMData.PhPIDwStart  = millis();
@@ -398,9 +404,6 @@ void setup()
   int app_cpu = xPortGetCoreID();
 
   Debug.print(DBG_DEBUG,"Creating loop Tasks");
-
-  // Create I2C sharing mutex
-  mutex = xSemaphoreCreateMutex();
 
   // Analog measurement polling task
   xTaskCreatePinnedToCore(
