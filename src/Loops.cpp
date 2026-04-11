@@ -296,9 +296,11 @@ void StatusLights(void *pvParameters)
   while (!startTasks) ;
   vTaskDelay(DT7);                                // Scheduling offset 
 
-  // Check PCF8574 presence
+  // Check PCF8574 presence (protected by I2C mutex)
+  lockI2C();
   Wire.beginTransmission(PCF8574ADDRESS);
   uint8_t pcf_err = Wire.endTransmission();
+  unlockI2C();
   if (pcf_err != 0) {
     Debug.print(DBG_ERROR, "PCF8574 (0x%02x) not found on I2C bus (err=%d), StatusLights task suspended", PCF8574ADDRESS, pcf_err);
     vTaskSuspend(nullptr);
