@@ -55,25 +55,33 @@ static bool i2c_pcf_ok    = false;   // Flag: PCF8574 found and initialized
 //----------------------------
 void AnalogInit()
 {
-  bool ads_devices_ok = true;
+  bool int_ok = false;
+  bool ext_ok = false;
 
-  // Check internal ADS1115
-  Wire.beginTransmission(ADS1115ADDRESS);
-  uint8_t err = Wire.endTransmission();
-  if (err != 0) {
-    Debug.print(DBG_ERROR, "ADS1115 int (0x%02x) not found on I2C bus (err=%d)", ADS1115ADDRESS, err);
-    ads_devices_ok = false;
+  // Retry I2C detection for up to 10 seconds at boot
+  unsigned long retryStart = millis();
+  while ((unsigned long)(millis() - retryStart) < 10000UL) {
+    if (!int_ok) {
+      Wire.beginTransmission(ADS1115ADDRESS);
+      if (Wire.endTransmission() == 0) {
+        int_ok = true;
+        Debug.print(DBG_INFO, "ADS1115 int (0x%02x) found", ADS1115ADDRESS);
+      }
+    }
+    if (!ext_ok) {
+      Wire.beginTransmission(EXT_ADS1115_ADDR);
+      if (Wire.endTransmission() == 0) {
+        ext_ok = true;
+        Debug.print(DBG_INFO, "ADS1115 ext (0x%02x) found", EXT_ADS1115_ADDR);
+      }
+    }
+    if (int_ok && ext_ok) break;
+    Debug.print(DBG_WARNING, "ADS1115 not all found (int=%d ext=%d), retrying...", int_ok, ext_ok);
+    delay(500);
   }
 
-  // Check external ADS1115
-  Wire.beginTransmission(EXT_ADS1115_ADDR);
-  err = Wire.endTransmission();
-  if (err != 0) {
-    Debug.print(DBG_ERROR, "ADS1115 ext (0x%02x) not found on I2C bus (err=%d)", EXT_ADS1115_ADDR, err);
-    ads_devices_ok = false;
-  }
-
-  if (!ads_devices_ok) {
+  if (!int_ok || !ext_ok) {
+    Debug.print(DBG_ERROR, "ADS1115 not found after 10s: int=%d ext=%d", int_ok, ext_ok);
     i2c_analog_ok = false;
     return;
   }
@@ -157,15 +165,25 @@ void AnalogPoll(void *pvParameters)
 
 void AnalogInit()
 {
-  // Check ADS1115 presence on I2C bus
-  Wire.beginTransmission(ADS1115ADDRESS);
-  uint8_t err = Wire.endTransmission();
-  if (err != 0) {
-    Debug.print(DBG_ERROR, "ADS1115 (0x%02x) not found on I2C bus (err=%d)", ADS1115ADDRESS, err);
-    i2c_analog_ok = false;
+  // Retry I2C detection for up to 10 seconds at boot
+  unsigned long retryStart = millis();
+  while ((unsigned long)(millis() - retryStart) < 10000UL) {
+    Wire.beginTransmission(ADS1115ADDRESS);
+    uint8_t err = Wire.endTransmission();
+    if (err == 0) {
+      i2c_analog_ok = true;
+      Debug.print(DBG_INFO, "ADS1115 (0x%02x) found on I2C bus", ADS1115ADDRESS);
+      break;
+    }
+    Debug.print(DBG_WARNING, "ADS1115 (0x%02x) not found (err=%d), retrying...", ADS1115ADDRESS, err);
+    delay(500);
+  }
+
+  if (!i2c_analog_ok) {
+    Debug.print(DBG_ERROR, "ADS1115 (0x%02x) not found after 10s timeout", ADS1115ADDRESS);
     return;
   }
-  i2c_analog_ok = true;
+
   adc_int.setSpeed(ADS1115_SPEED_16SPS);
   adc_int.addChannel(ADS1115_CHANNEL0, ADS1115_RANGE_6144);
   adc_int.addChannel(ADS1115_CHANNEL1, ADS1115_RANGE_6144);
@@ -296,16 +314,26 @@ void StatusLights(void *pvParameters)
   while (!startTasks) ;
   vTaskDelay(DT7);                                // Scheduling offset 
 
-  // Check PCF8574 presence (protected by I2C mutex)
-  lockI2C();
-  Wire.beginTransmission(PCF8574ADDRESS);
-  uint8_t pcf_err = Wire.endTransmission();
-  unlockI2C();
-  if (pcf_err != 0) {
-    Debug.print(DBG_ERROR, "PCF8574 (0x%02x) not found on I2C bus (err=%d), StatusLights task suspended", PCF8574ADDRESS, pcf_err);
+  // Retry PCF8574 detection for up to 10 seconds
+  unsigned long retryStart = millis();
+  while ((unsigned long)(millis() - retryStart) < 10000UL) {
+    lockI2C();
+    Wire.beginTransmission(PCF8574ADDRESS);
+    uint8_t pcf_err = Wire.endTransmission();
+    unlockI2C();
+    if (pcf_err == 0) {
+      i2c_pcf_ok = true;
+      Debug.print(DBG_INFO, "PCF8574 (0x%02x) found on I2C bus", PCF8574ADDRESS);
+      break;
+    }
+    Debug.print(DBG_WARNING, "PCF8574 (0x%02x) not found (err=%d), retrying...", PCF8574ADDRESS, pcf_err);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
+  }
+
+  if (!i2c_pcf_ok) {
+    Debug.print(DBG_ERROR, "PCF8574 (0x%02x) not found after 10s, StatusLights task suspended", PCF8574ADDRESS);
     vTaskSuspend(nullptr);
   }
-  i2c_pcf_ok = true;
 
   TickType_t period = PT7;  
   TickType_t ticktime = xTaskGetTickCount();
@@ -595,9 +623,18 @@ void getTemp(void *pvParameters)
   while (!startTasks) ;
   vTaskDelay(DT4);                                // Scheduling offset 
 
-  if (sensors_W.getDeviceCount() == 0 && sensors_A.getDeviceCount() == 0) {
-    Debug.print(DBG_ERROR, "getTemp: no temperature sensor found, task suspended");
-    vTaskSuspend(nullptr);
+  // Retry temperature sensor detection for up to 10 seconds
+  unsigned long retryStart = millis();
+  while (sensors_W.getDeviceCount() == 0 && sensors_A.getDeviceCount() == 0) {
+    if ((unsigned long)(millis() - retryStart) >= 10000UL) {
+      Debug.print(DBG_ERROR, "getTemp: no temperature sensor found after 10s, task suspended");
+      vTaskSuspend(nullptr);
+    }
+    Debug.print(DBG_WARNING, "getTemp: no sensor found, retrying...");
+    sensors_W.begin();
+    sensors_W.begin(); // two times to work-around of a OneWire library bug for enumeration
+    sensors_A.begin();
+    vTaskDelay(500 / portTICK_PERIOD_MS);
   }
 
   TickType_t period = PT4;  
