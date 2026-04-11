@@ -148,7 +148,7 @@ void SetPhPID(bool);
 void SetOrpPID(bool);
 int  freeRam (void);
 void AnalogInit(void);
-void TempInit(void);
+bool TempInit(void);
 unsigned stack_hwm();
 void stack_mon(UBaseType_t&);
 void info();
@@ -362,7 +362,9 @@ void setup()
   AnalogInit();
 
   // Init Water and Air temperatures measurements
-  TempInit();
+  if (!TempInit()) {
+    Debug.print(DBG_WARNING, "TempInit: one or more temperature sensors not found");
+  }
 
   // Clear status LEDs
   Wire.beginTransmission(PCF8574ADDRESS);
