@@ -75,9 +75,9 @@
 //Type of pH and Orp sensors acquisition :
 //INT_ADS1115 : single ended signal with internal ADS1115 ADC (default)
 //EXT_ADS1115 : differential signal with external ADS1115 ADC (Loulou74 board)
-#define EXT_ADS1115
+//#define EXT_ADS1115
 #define INT_ADS1115_ADDR ADS1115ADDRESS
-#define EXT_ADS1115_ADDR ADS1115ADDRESS+1 // or +2 or +3 depending on board setup
+//#define EXT_ADS1115_ADDR ADS1115ADDRESS+1 // or +2 or +3 depending on board setup
 
 // Buzzer
 #define BUZZER           2
