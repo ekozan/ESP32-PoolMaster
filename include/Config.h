@@ -78,7 +78,7 @@
 // --> Décommentez EXT_ADS1115 seulement si vous avez DEUX ADS1115 sur le bus I2C
 //#define EXT_ADS1115
 #define INT_ADS1115_ADDR ADS1115ADDRESS
-#define EXT_ADS1115_ADDR ADS1115ADDRESS+1 // or +2 or +3 depending on board setup
+//#define EXT_ADS1115_ADDR ADS1115ADDRESS+1 // or +2 or +3 depending on board setup
 
 // Buzzer
 #define BUZZER           2
