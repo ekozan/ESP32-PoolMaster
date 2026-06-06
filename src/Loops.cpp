@@ -603,15 +603,15 @@ bool TempInit()
     }
   } 
 
-  if(!error) 
+  // Always enable async mode to avoid 750ms blocking reads
+  sensors_W.setWaitForConversion(false);
+  sensors_A.setWaitForConversion(false);
+
+  if(!error)
   {
-    // set the resolution
+    // set the resolution only if sensors were found
     sensors_W.setResolution(DS18B20_W, TEMPERATURE_RESOLUTION);
     sensors_A.setResolution(DS18B20_A, TEMPERATURE_RESOLUTION);
-
-    //don't wait ! Asynchronous mode
-    sensors_W.setWaitForConversion(false);
-    sensors_A.setWaitForConversion(false);
   }
   return !error;
 }
@@ -623,18 +623,9 @@ void getTemp(void *pvParameters)
   while (!startTasks) ;
   vTaskDelay(DT4);                                // Scheduling offset 
 
-  // Retry temperature sensor detection for up to 10 seconds
-  unsigned long retryStart = millis();
-  while (sensors_W.getDeviceCount() == 0 && sensors_A.getDeviceCount() == 0) {
-    if ((unsigned long)(millis() - retryStart) >= 10000UL) {
-      Debug.print(DBG_ERROR, "getTemp: no temperature sensor found after 10s, task suspended");
-      vTaskSuspend(nullptr);
-    }
-    Debug.print(DBG_WARNING, "getTemp: no sensor found, retrying...");
-    sensors_W.begin();
-    sensors_W.begin(); // two times to work-around of a OneWire library bug for enumeration
-    sensors_A.begin();
-    vTaskDelay(500 / portTICK_PERIOD_MS);
+  if (sensors_W.getDeviceCount() == 0 && sensors_A.getDeviceCount() == 0) {
+    Debug.print(DBG_WARNING, "getTemp: no temperature sensor found, task suspended");
+    vTaskSuspend(nullptr);
   }
 
   TickType_t period = PT4;  
