@@ -122,6 +122,12 @@ void UpdateTFT(void *pvParameters)
       // Handle Menu actions in the Loop
       NexMenu_Loop(myNex);
     } else {
+      // Nextion is sleeping: send wake-up command every ~10s to recover from lost sleep state
+      static unsigned long lastWakeAttempt = 0;
+      if ((unsigned long)(millis() - lastWakeAttempt) >= 10000UL) {
+        myNex.writeStr("sleep=0");
+        lastWakeAttempt = millis();
+      }
       period = PT10;
     }
     #ifdef CHRONO
