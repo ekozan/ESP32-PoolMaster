@@ -43,6 +43,9 @@ void ResetTFT()
   myNex.writeStr(F("usup=1")); // Authorize auto wake up on serial data
   myNex.writeStr("page pageSplash");
   delay(500);
+  // Nextion is awake after reset — clear software sleep flag so data writes start immediately.
+  myNex.Nextion_Sleeping = false;
+  myNex.LastActionMillis = millis();
   NexMenu_Init(myNex);
 }
 
@@ -139,6 +142,11 @@ void UpdateTFT(void *pvParameters)
         Debug.print(DBG_WARNING,"[Nextion] Sleeping - sending wake-up. PageId=%d",myNex.currentPageId);
         myNex.writeStr("sleep=0");
         lastWakeAttempt = millis();
+        // Force awake state: if the HMI doesn't send printh page events,
+        // Nextion_Sleeping would never clear on its own. Since we just sent
+        // sleep=0, the display IS awake — reflect that in software.
+        myNex.Nextion_Sleeping = false;
+        myNex.LastActionMillis = millis();
       }
       period = PT10;
     }
