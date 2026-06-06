@@ -23,30 +23,38 @@ BaseType_t xWasDelayed;     // Return value for task delay
 void ResetTFT()
 {
   NexEvents_Init();
-  myNex.SetEventManager(&NexeventManager); // Set the event manager to handle events sent by Nextion
+  myNex.SetEventManager(&NexeventManager);
 
-  // Try to wake/reset Nextion at 115200 first (in case it was already configured)
+  // Step 1 – try at 115200 first (Nextion may already be configured at that speed)
   myNex.begin(115200);
   myNex.writeStr("sleep=0");
-  myNex.writeStr(F("rest")); // Nextion resets and goes back to 9600 baud
+  delay(50);
 
-  // Wait for Nextion to reboot (takes ~700ms), then re-sync baud rate.
-  // After 'rest', Nextion is at 9600; switch Serial2 to 9600, send baud=115200, then switch back.
-  delay(800);
+  // Step 2 – send baud=115200 at both speeds so we cover the two possible states.
+  // Try 9600 first (factory default / after reset)
   myNex.begin(9600);
   Serial2.print("baud=115200");
   Serial2.print("\xFF\xFF\xFF");
   delay(100);
+  // Then at 115200 in case it was already at that speed
   myNex.begin(115200);
+  Serial2.print("baud=115200");
+  Serial2.print("\xFF\xFF\xFF");
+  delay(100);
 
-  myNex.writeStr(F("wup=1")); // Exit from sleep on last page
-  myNex.writeStr(F("usup=1")); // Authorize auto wake up on serial data
+  // Step 3 – both sides are now at 115200; send init commands
+  myNex.begin(115200);
+  myNex.writeStr("sleep=0");
+  myNex.writeStr(F("wup=1"));
+  myNex.writeStr(F("usup=1"));
   myNex.writeStr("page pageSplash");
   delay(500);
-  // Nextion is awake after reset — clear software sleep flag so data writes start immediately.
+
+  // Mark as awake regardless of page events from HMI
   myNex.Nextion_Sleeping = false;
   myNex.LastActionMillis = millis();
   NexMenu_Init(myNex);
+  Debug.print(DBG_INFO,"[Nextion] ResetTFT complete");
 }
 
 // Read and Write the boolean values stored in a 32 bits number
@@ -125,6 +133,19 @@ void UpdateTFT(void *pvParameters)
     // will fire.
     // Return  0 if Nextion is sleeping 
     //         1 if Nextion Up
+    // Periodic connectivity test every 30s: read 'sleep' variable back from Nextion.
+    // Returns 0=awake, 1=sleeping, 777777=no response (broken communication).
+    static unsigned long lastConnTest = 0;
+    if ((unsigned long)(millis() - lastConnTest) >= 30000UL) {
+      lastConnTest = millis();
+      uint32_t sleepVal = myNex.readNumber("sleep");
+      if (sleepVal == 777777) {
+        Debug.print(DBG_ERROR,"[Nextion] No response to readNumber (comm broken or baud mismatch). PageId=%d",myNex.currentPageId);
+      } else {
+        Debug.print(DBG_INFO,"[Nextion] Comm OK. sleep=%d PageId=%d",sleepVal,myNex.currentPageId);
+      }
+    }
+
     if(myNex.NextionListen())
     {
        WriteSwitches(); // Write the switches bitmap every loop
