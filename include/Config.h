@@ -73,8 +73,9 @@
 #define PCF8574ADDRESS  0x20 // 0x20 for PCF8574(N) or 0x38 for PCF8574A(N)
 
 //Type of pH and Orp sensors acquisition :
-//INT_ADS1115 : single ended signal with internal ADS1115 ADC (default)
-//EXT_ADS1115 : differential signal with external ADS1115 ADC (Loulou74 board)
+//INT_ADS1115 : single ended signal with internal ADS1115 ADC (default, un seul ADS1115 a 0x48)
+//EXT_ADS1115 : differential signal with external ADS1115 ADC (Loulou74 board, deux ADS1115 : 0x48 + 0x49)
+// --> Décommentez EXT_ADS1115 seulement si vous avez DEUX ADS1115 sur le bus I2C
 //#define EXT_ADS1115
 #define INT_ADS1115_ADDR ADS1115ADDRESS
 //#define EXT_ADS1115_ADDR ADS1115ADDRESS+1 // or +2 or +3 depending on board setup

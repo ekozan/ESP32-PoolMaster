@@ -1,6 +1,8 @@
 #undef __STRICT_ANSI__              // work-around for Time Zone definition
 #include <stdint.h>                 // std lib (types definitions)
 #include <Arduino.h>                // Arduino framework
+#include <soc/soc.h>
+#include <soc/rtc_cntl_reg.h>
 #include <esp_sntp.h>
 #include <stdarg.h>
 #include "Config.h"
@@ -174,6 +176,10 @@ void onOTAEnd(bool);*/
 // Setup
 void setup()
 {
+  // Disable brownout detector to avoid spurious resets on WiFi init current spikes.
+  // Fix the real cause with a proper 5V/2A power supply + good USB cable.
+  WRITE_PERI_REG(RTC_CNTL_BROWN_OUT_REG, 0);
+
   //Serial port for debug info
   Serial.begin(115200);
 
@@ -345,6 +351,7 @@ void setup()
   // Initialize WiFi events management (on connect/disconnect)
   WiFi.onEvent(WiFiEvent);
   initTimers();
+  WiFi.setTxPower(WIFI_POWER_8_5dBm); // Reduce TX power to lower peak current draw
   InitWiFi();
   connectToWiFi();
 

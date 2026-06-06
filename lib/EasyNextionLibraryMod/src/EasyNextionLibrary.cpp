@@ -31,6 +31,7 @@ void EasyNex::begin(unsigned long baud){
   }
 
   delay(100);            // Wait for everything to initialize properly
+  LastActionMillis = millis(); // Start sleep timer from now, not from boot
 }
 
 
