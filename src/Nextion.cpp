@@ -25,9 +25,20 @@ void ResetTFT()
   NexEvents_Init();
   myNex.SetEventManager(&NexeventManager); // Set the event manager to handle events sent by Nextion
 
+  // Try to wake/reset Nextion at 115200 first (in case it was already configured)
   myNex.begin(115200);
   myNex.writeStr("sleep=0");
-  myNex.writeStr(F("rest"));
+  myNex.writeStr(F("rest")); // Nextion resets and goes back to 9600 baud
+
+  // Wait for Nextion to reboot (takes ~700ms), then re-sync baud rate.
+  // After 'rest', Nextion is at 9600; switch Serial2 to 9600, send baud=115200, then switch back.
+  delay(800);
+  myNex.begin(9600);
+  Serial2.print("baud=115200");
+  Serial2.print("\xFF\xFF\xFF");
+  delay(100);
+  myNex.begin(115200);
+
   myNex.writeStr(F("wup=1")); // Exit from sleep on last page
   myNex.writeStr(F("usup=1")); // Authorize auto wake up on serial data
   myNex.writeStr("page pageSplash");
@@ -125,6 +136,7 @@ void UpdateTFT(void *pvParameters)
       // Nextion is sleeping: send wake-up command every ~10s to recover from lost sleep state
       static unsigned long lastWakeAttempt = 0;
       if ((unsigned long)(millis() - lastWakeAttempt) >= 10000UL) {
+        Debug.print(DBG_WARNING,"[Nextion] Sleeping - sending wake-up. PageId=%d",myNex.currentPageId);
         myNex.writeStr("sleep=0");
         lastWakeAttempt = millis();
       }
