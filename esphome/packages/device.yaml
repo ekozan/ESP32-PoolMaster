@@ -13,6 +13,18 @@ esphome:
     name: "ekozan.esp32-poolmaster"
     version: "ESPHome-1.0"
 
+  # Compilation séquentielle. Par défaut ESPHome lance autant de compilateurs
+  # que de cœurs ; sur l'add-on Home Assistant, plusieurs `cc1plus` en
+  # parallèle sur les grosses unités (api_server.cpp, web_server) épuisent la
+  # RAM et le noyau en tue un — la compilation s'arrête alors sur
+  # « Killed signal terminated program cc1plus », qui ressemble à une erreur de
+  # code mais n'en est pas une.
+  #
+  # Si vous compilez sur une machine avec beaucoup de RAM, montez cette valeur
+  # (ou supprimez la ligne) pour accélérer nettement la compilation. ccache est
+  # actif : seules les premières compilations sont longues.
+  compile_process_limit: 1
+
 esp32:
   board: esp32doit-devkit-v1
   framework:

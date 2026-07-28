@@ -241,6 +241,29 @@ Deux points en découlent :
 Les réglages persistants (consignes, calibrations, compteurs) vivent dans la
 partition `nvs` de 448 Ko et ne consomment rien sur le budget applicatif.
 
+## Compilation : « Killed signal terminated program cc1plus »
+
+Ce message n'est **pas** une erreur de code : le compilateur a été tué par le
+noyau, faute de mémoire. Il apparaît typiquement sur `api_server.cpp` ou
+`web_server`, très tôt dans la compilation.
+
+Par défaut ESPHome lance autant de compilateurs que de cœurs. Sur l'add-on
+Home Assistant, plusieurs `cc1plus` en parallèle sur ces grosses unités
+épuisent la RAM. `packages/device.yaml` fixe donc :
+
+```yaml
+esphome:
+  compile_process_limit: 1
+```
+
+Sur une machine avec beaucoup de mémoire, montez cette valeur (bornée au
+nombre de cœurs) pour accélérer nettement la compilation. ccache étant actif,
+seules les premières compilations sont longues.
+
+Si le problème persiste malgré `1`, c'est que la machine est vraiment juste :
+ajoutez du swap, ou compilez depuis un PC avec `esphome run` puis flashez en
+OTA.
+
 ## Matériel pris en charge
 
 | Élément | Broche / adresse |
