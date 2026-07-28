@@ -62,32 +62,9 @@ packages:
   # network:       volontairement absent — remplacé par les blocs ci-dessous
 
 # --- Variante : import distant depuis GitHub --------------------------------
-# Pour consommer les paquets sans cloner le dépôt, remplacez le bloc `packages:`
-# ci-dessus par celui-ci. ESPHome clone le dépôt dans son cache et le
-# rafraîchit selon `refresh:`. Les substitutions ci-dessus restent locales.
-#
-# packages:
-#   poolmaster:
-#     url: https://github.com/ekozan/ESP32-PoolMaster
-#     ref: main
-#     refresh: 1d
-#     files:
-#       - esphome/packages/device.yaml
-#       - esphome/packages/buses.yaml
-#       - esphome/packages/state.yaml
-#       - esphome/packages/scheduler.yaml
-#       - esphome/packages/measures.yaml
-#       - esphome/packages/modes.yaml
-#       - esphome/packages/filtration.yaml
-#       - esphome/packages/regulation.yaml
-#       - esphome/packages/regulation_ph.yaml
-#       - esphome/packages/regulation_orp.yaml
-#       - esphome/packages/electrolyse.yaml
-#       - esphome/packages/robot.yaml
-#       - esphome/packages/levels.yaml
-#       - esphome/packages/safety.yaml
-#       - esphome/packages/auxiliary.yaml
-#       - esphome/packages/status_leds.yaml
+# Pour consommer les paquets sans cloner le dépôt, voir le fichier prêt à
+# l'emploi exemple-import-distant.yaml : même configuration réseau, mais les
+# paquets sont récupérés par ESPHome depuis GitHub.
 
 # ==============================================================================
 # WiFi

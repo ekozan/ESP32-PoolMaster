@@ -37,6 +37,7 @@ d'entité.
 ```
 poolmaster.yaml            substitutions (brochage) + liste des paquets
 exemple-webui-wifi-ota.yaml  variante : WiFi/OTA/serveur web détaillés
+exemple-import-distant.yaml  variante : paquets importés depuis GitHub
 secrets.yaml               vos identifiants (non versionné)
 packages/
   device.yaml              carte ESP32, framework, logger, diagnostics
@@ -93,6 +94,59 @@ dictionnaires clé par clé (le fichier principal gagne) mais **concatène les
 listes**. Redéfinir `wifi:` ou `web_server:` fonctionne ; redéfinir `ota:` en
 changeant le port produit deux entrées et l'erreur *« Only a single port is
 supported »*. D'où la séparation `device.yaml` / `network.yaml`.
+
+### Import distant (sans cloner le dépôt)
+
+`exemple-import-distant.yaml` récupère les paquets directement depuis GitHub :
+un dossier contenant ce seul fichier et un `secrets.yaml` suffit à compiler.
+
+```yaml
+packages:
+  poolmaster:
+    url: https://github.com/ekozan/ESP32-PoolMaster
+    ref: v1.0.0        # tag ou SHA — voir ci-dessous
+    refresh: 1d
+    files:
+      - esphome/packages/device.yaml
+      - esphome/packages/buses.yaml
+      # … un fichier par paquet, sauf network.yaml
+```
+
+**Épinglez un tag ou un SHA.** Sur une branche mouvante, un `esphome run`
+lancé pour changer un mot de passe WiFi embarquerait au passage toute logique
+de régulation poussée entre-temps, sans relecture. Sur un équipement qui dose
+de l'acide et du chlore, la mise à jour doit rester un geste délibéré : on
+change `ref:`. Avec un tag ou un SHA, `refresh:` n'a d'ailleurs plus d'effet,
+le contenu ne bougeant pas.
+
+On importe tous les paquets **sauf `network.yaml`**, remplacé par la
+configuration WiFi/OTA/serveur web locale du fichier — c'est la seule partie
+qui dépend de votre réseau.
+
+### Réglages depuis Home Assistant
+
+Tout se règle depuis Home Assistant, sans YAML côté HA : les entités
+remontent automatiquement par l'API native. Aucune recompilation n'est
+nécessaire pour changer une consigne.
+
+| Type | Nombre | Exemples |
+|---|---|---|
+| `number` | 31 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, volumes et débits des bacs, calibrations C0/C1 |
+| `switch` | 16 | mode auto, mode hiver, pompes, PID pH/ORP, mode électrolyseur, relais R0/R1, buzzer |
+| `button` | 5 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, redémarrer |
+
+Les 31 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
+`restore_value: true` : la valeur est écrite dans la partition `nvs` et
+survit aux coupures de courant comme aux mises à jour OTA. Les valeurs
+`initial_value` du YAML ne servent qu'au tout premier démarrage.
+
+Les compteurs internes persistants (temps de marche du jour, volume consommé
+dans les bacs, plage de filtration calculée) sont dans le même cas — voir
+`packages/state.yaml`.
+
+Sont en revanche volontairement **non** persistants : les drapeaux d'erreur
+(`psi_error`, `ph_uptime_error`…), qui repartent à zéro au démarrage plutôt
+que de laisser un défaut ancien bloquer la régulation après un reboot.
 
 ### Place disponible en flash
 

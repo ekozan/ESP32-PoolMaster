@@ -1,0 +1,172 @@
+# ==============================================================================
+# PoolMaster — Exemple : import distant des paquets depuis GitHub
+# ==============================================================================
+# Variante de exemple-webui-wifi-ota.yaml qui ne nécessite **aucun clone** du
+# dépôt. ESPHome récupère lui-même les paquets, les met en cache et les
+# rafraîchit selon `refresh:`.
+#
+# Ce fichier et un secrets.yaml suffisent :
+#
+#   mkdir ma-piscine && cd ma-piscine
+#   # y déposer ce fichier + secrets.yaml
+#   esphome run exemple-import-distant.yaml
+#
+# On importe la logique piscine, mais **pas** packages/network.yaml : le WiFi,
+# l'OTA et le serveur web sont définis ici, en bas, parce que ce sont eux qui
+# dépendent de votre réseau.
+# ==============================================================================
+
+substitutions:
+  name: poolmaster
+  friendly_name: PoolMaster
+
+  # --- Brochage (identique à include/Config.h) ---
+  pin_filtration: GPIO32   # Pompe de filtration
+  pin_robot: GPIO33        # Pompe robot
+  pin_ph_pump: GPIO25      # Pompe péristaltique pH (acide)
+  pin_chl_pump: GPIO26     # Pompe péristaltique Chlore
+  pin_relay_r0: GPIO27     # Relais libre R0 (projecteur)
+  pin_relay_r1: GPIO4      # Relais libre R1
+  pin_swg: GPIO13          # Électrolyseur au sel (SWG)
+  pin_fill_pump: GPIO23    # Pompe de remplissage
+  pin_buzzer: GPIO2        # Buzzer
+  pin_chl_level: GPIO39    # Contact niveau bac Chlore (ouvert = niveau bas)
+  pin_ph_level: GPIO36     # Contact niveau bac pH (ouvert = niveau bas)
+  pin_pool_level: GPIO34   # Contact niveau piscine (ouvert = niveau bas)
+  pin_ow_air: GPIO18       # Bus OneWire température air
+  pin_ow_water: GPIO19     # Bus OneWire température eau
+  pin_sda: GPIO21
+  pin_scl: GPIO22
+
+# ==============================================================================
+# Import distant
+# ==============================================================================
+packages:
+  poolmaster:
+    url: https://github.com/ekozan/ESP32-PoolMaster
+
+    # ---- Épinglage ----------------------------------------------------------
+    # `ref:` accepte une branche, un tag ou un SHA de commit.
+    #
+    # Pour un équipement qui dose de l'acide et du chlore, **épinglez un tag ou
+    # un SHA**. Sur une branche mouvante, un simple `esphome run` pour changer
+    # un mot de passe WiFi embarquerait au passage toute logique de régulation
+    # qui aurait été poussée entre-temps, sans que vous l'ayez relue. Avec un
+    # tag, la mise à jour devient un geste délibéré : vous changez `ref:`.
+    #
+    # Exemples :
+    #   ref: v1.0.0                                     # tag  (recommandé)
+    #   ref: 949ddcdd314d6d6313f2d9b570db12508c278b9e   # SHA  (le plus strict)
+    ref: claude/optimize-file-split-rpijza
+
+    # Fréquence de re-vérification du dépôt distant. Sans effet si `ref:` est un
+    # tag ou un SHA (le contenu ne bouge pas) — d'où l'intérêt d'épingler.
+    refresh: 1d
+
+    files:
+      # --- Socle (network.yaml volontairement absent, voir plus bas) ---
+      - esphome/packages/device.yaml
+      - esphome/packages/buses.yaml
+      - esphome/packages/state.yaml
+      - esphome/packages/scheduler.yaml
+      # --- Mesures et modes ---
+      - esphome/packages/measures.yaml
+      - esphome/packages/modes.yaml
+      # --- Fonctions de la piscine ---
+      - esphome/packages/filtration.yaml
+      - esphome/packages/regulation.yaml
+      - esphome/packages/regulation_ph.yaml
+      - esphome/packages/regulation_orp.yaml
+      - esphome/packages/electrolyse.yaml
+      - esphome/packages/robot.yaml
+      - esphome/packages/levels.yaml
+      - esphome/packages/safety.yaml
+      - esphome/packages/auxiliary.yaml
+      # --- Interface locale ---
+      - esphome/packages/status_leds.yaml
+
+# ==============================================================================
+# WiFi
+# ==============================================================================
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # IP fixe : recommandé en local technique. L'OTA et l'interface web
+  # s'adressent par IP, une adresse qui change casse favoris et scripts.
+  manual_ip:
+    static_ip: 192.168.1.50
+    gateway: 192.168.1.1
+    subnet: 255.255.255.0
+    dns1: 192.168.1.1
+
+  # Le firmware d'origine descend à 8.5 dBm (WIFI_POWER_8_5dBm, commit 881f9f6)
+  # parce que les pics de courant de la radio faisaient décrocher
+  # l'alimentation. Remontez si votre point d'accès est loin, mais traitez
+  # d'abord la cause : alimentation 5V/2A et câble court.
+  output_power: 8.5dB
+
+  # L'économie d'énergie WiFi fait tomber des paquets : l'API Home Assistant
+  # se déconnecte et les OTA échouent en cours de transfert.
+  power_save_mode: none
+
+  reboot_timeout: 15min
+
+  ap:
+    ssid: "PoolMaster Fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+# ==============================================================================
+# API Home Assistant
+# ==============================================================================
+# C'est par ici que remontent les 31 réglages, 16 interrupteurs et 5 boutons :
+# ils apparaissent tout seuls dans Home Assistant, sans YAML côté HA.
+api:
+  encryption:
+    key: !secret api_encryption_key
+  reboot_timeout: 15min
+
+# ==============================================================================
+# Mise à jour OTA
+# ==============================================================================
+# Premier flash par USB, ensuite `esphome run` passe en OTA.
+ota:
+  - platform: esphome
+    password: !secret ota_password
+    on_begin:
+      then:
+        - logger.log: "OTA: debut de mise a jour"
+    on_error:
+      then:
+        - logger.log:
+            format: "OTA: echec (code %d)"
+            args: ['x']
+            level: ERROR
+
+# Mode sans échec : après plusieurs redémarrages rapprochés, seuls le WiFi et
+# l'OTA démarrent. Indispensable sur du matériel en extérieur — sans lui, une
+# configuration qui plante en boucle n'est plus récupérable qu'au tournevis.
+safe_mode:
+  num_attempts: 5
+  reboot_timeout: 5min
+
+# ==============================================================================
+# Interface web embarquée
+# ==============================================================================
+web_server:
+  port: 80
+  version: 3
+
+  # Sans authentification, toute personne sur le réseau peut démarrer les
+  # pompes doseuses.
+  auth:
+    username: !secret web_username
+    password: !secret web_password
+
+  include_internal: false
+
+  # Assets embarqués (piscine sans accès Internet) : ~142 Ko en version 3,
+  # ~24 Ko en version 2, sur un emplacement applicatif de 1,75 Mo.
+  # local: true
