@@ -1,0 +1,35 @@
+# CrowdSec AppSec — whitelist pour Ente / S3 (s3.ffd.link)
+#
+# Problème corrigé :
+#   Ban AppSec/WAF sur les URLs S3 pré-signées d'Ente (X-Amz-Signature=...)
+#   déclenché par la règle CRS native 901340 ("Enabling body inspection",
+#   zone REQBODY_PROCESSOR).
+#
+# Pourquoi c'est un faux positif :
+#   901340 fait partie de REQUEST-901-INITIALIZATION du OWASP CRS. C'est une
+#   règle d'initialisation (phase:1, action "pass") : elle ne détecte aucune
+#   attaque, elle active seulement l'inspection du corps de la requête quand
+#   le Content-Type n'est pas reconnu. Elle ne devrait jamais provoquer de
+#   blocage — la désactiver ne réduit en rien la détection réelle.
+#
+# Déploiement : voir crowdsec/README.md
+name: custom/ente-s3-whitelist
+
+# On retire la règle 901340 du moteur in-band au chargement du moteur AppSec.
+on_load:
+  - apply:
+      - RemoveInBandRuleByID(901340)
+
+# --- Optionnel : ceinture + bretelles -------------------------------------
+# Si d'autres règles CRS venaient à matcher à tort sur le endpoint S3 d'Ente
+# (uploads chiffrés = binaire aléatoire, ça arrive), décommenter le bloc
+# ci-dessous pour annuler l'alerte ET le blocage uniquement pour ce host.
+# Attention : cela désactive le WAF pour s3.ffd.link — à n'activer que si
+# d'autres faux positifs apparaissent.
+#
+# on_match:
+#   - filter: IsInBand && req.Host == 's3.ffd.link'
+#     apply:
+#       - SetRemediation("allow")
+#       - CancelAlert()
+#       - CancelEvent()
