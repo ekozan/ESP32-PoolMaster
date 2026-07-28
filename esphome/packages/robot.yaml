@@ -1,0 +1,65 @@
+# ==============================================================================
+# Robot de nettoyage
+# ==============================================================================
+# En mode automatique : démarre « délai » minutes après le lancement de la
+# filtration, tourne « durée » minutes, une seule fois par jour (le drapeau est
+# remis à zéro à minuit par scheduler.yaml) et jamais sans filtration.
+# ==============================================================================
+switch:
+  - platform: gpio
+    pin: ${pin_robot}
+    name: "Robot"
+    id: robot_pump
+    icon: mdi:robot-vacuum
+    restore_mode: ALWAYS_OFF
+
+number:
+  - platform: template
+    name: "Robot délai après filtration"
+    id: num_robot_delay
+    unit_of_measurement: "min"
+    min_value: 0
+    max_value: 240
+    step: 5
+    initial_value: 60
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "Robot durée"
+    id: num_robot_duration
+    unit_of_measurement: "min"
+    min_value: 5
+    max_value: 240
+    step: 5
+    initial_value: 90
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+
+script:
+  # ----------------------------------------------------------------------------
+  # Tick 1 s : appelé par scheduler.yaml.
+  # ----------------------------------------------------------------------------
+  - id: robot_tick
+    then:
+      - lambda: |-
+          const uint32_t now = millis();
+          const bool filt_on = id(filtration_pump).state;
+
+          if (id(sw_auto_mode).state && filt_on && !id(robot_done)) {
+            const uint32_t delay_ms = (uint32_t)(id(num_robot_delay).state * 60000.0f);
+            const uint32_t dur_ms   = (uint32_t)(id(num_robot_duration).state * 60000.0f);
+            if (!id(robot_pump).state &&
+                (now - id(filt_started_ms)) >= delay_ms) {
+              id(robot_pump).turn_on();
+              id(robot_started_ms) = now;
+            } else if (id(robot_pump).state &&
+                       (now - id(robot_started_ms)) >= dur_ms) {
+              id(robot_pump).turn_off();
+              id(robot_done) = true;
+            }
+          }
+          if (!filt_on && id(robot_pump).state) id(robot_pump).turn_off();

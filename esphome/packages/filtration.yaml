@@ -1,0 +1,151 @@
+# ==============================================================================
+# Filtration : pompe, plage horaire quotidienne, antigel
+# ==============================================================================
+# Durée calculée chaque jour à 15h05 selon la température de l'eau
+#   T° < seuil bas             -> 2 h
+#   seuil bas <= T° < consigne -> T°/3 h
+#   T° >= consigne             -> T°/2 h
+# La fenêtre est centrée sur 15 h puis bornée par heure-min / heure-max.
+# Les seuils de température (num_water_low / num_water_setpoint) sont déclarés
+# dans regulation.yaml.
+# ==============================================================================
+switch:
+  - platform: gpio
+    pin: ${pin_filtration}
+    name: "Pompe filtration"
+    id: filtration_pump
+    icon: mdi:pump
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      - lambda: 'id(filt_started_ms) = millis();'
+
+number:
+  - platform: template
+    name: "Filtration heure min"
+    id: num_filt_start_min
+    unit_of_measurement: "h"
+    icon: mdi:clock-start
+    min_value: 0
+    max_value: 23
+    step: 1
+    initial_value: 8
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "Filtration heure max"
+    id: num_filt_stop_max
+    unit_of_measurement: "h"
+    icon: mdi:clock-end
+    min_value: 1
+    max_value: 24
+    step: 1
+    initial_value: 22
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+
+sensor:
+  - platform: template
+    name: "Filtration début"
+    unit_of_measurement: "h"
+    icon: mdi:clock-start
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: 'return id(filt_start_h);'
+  - platform: template
+    name: "Filtration fin"
+    unit_of_measurement: "h"
+    icon: mdi:clock-end
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: 'return id(filt_stop_h);'
+  - platform: template
+    name: "Filtration durée"
+    unit_of_measurement: "h"
+    icon: mdi:timelapse
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: 'return id(filt_duration_h);'
+
+binary_sensor:
+  - platform: template
+    name: "Antigel actif"
+    icon: mdi:snowflake-alert
+    lambda: 'return id(antifreeze_on);'
+
+button:
+  - platform: template
+    name: "Recalculer la plage de filtration"
+    icon: mdi:calculator
+    on_press:
+      - script.execute: compute_filtration_schedule
+
+script:
+  # ----------------------------------------------------------------------------
+  # Tick minute : antigel puis marche/arrêt automatique de la filtration.
+  # ----------------------------------------------------------------------------
+  - id: filtration_tick
+    then:
+      - lambda: |-
+          auto t = id(sntp_time).now();
+          if (!t.is_valid()) return;
+          const int h = t.hour;
+
+          // --- Antigel : en mode hiver, marche forcée sous -2°C ; on ne
+          //     relâche qu'au-dessus de +2°C (hystérésis de l'origine) ---
+          if (id(air_temp).has_state()) {
+            if (id(sw_winter_mode).state && id(air_temp).state < -2.0f)
+              id(antifreeze_on) = true;
+            if (id(air_temp).state > 2.0f) id(antifreeze_on) = false;
+          }
+
+          // --- Filtration automatique ---
+          if (id(psi_error)) return;
+          const bool in_window = h >= id(filt_start_h) && h < id(filt_stop_h);
+          const bool want = (id(sw_auto_mode).state && in_window) || id(antifreeze_on);
+          if (!id(sw_auto_mode).state && !id(antifreeze_on)) return;
+
+          if (want && !id(filtration_pump).state) {
+            ESP_LOGI("poolmaster", "Filtration: demarrage auto (%dh-%dh)",
+                     id(filt_start_h), id(filt_stop_h));
+            id(filtration_pump).turn_on();
+          }
+          // Jamais d'arrêt automatique si l'air est <= 2°C (protection gel)
+          const bool freeze_hold = id(air_temp).has_state() &&
+                                   id(air_temp).state <= 2.0f;
+          if (!want && id(filtration_pump).state && !freeze_hold) {
+            ESP_LOGI("poolmaster", "Filtration: arret auto");
+            id(filtration_pump).turn_off();
+          }
+
+  # ----------------------------------------------------------------------------
+  # Calcul quotidien de la plage de filtration (formule de l'origine).
+  # ----------------------------------------------------------------------------
+  - id: compute_filtration_schedule
+    then:
+      - lambda: |-
+          if (!id(water_temp).has_state()) {
+            ESP_LOGW("poolmaster", "Calcul filtration: temperature eau inconnue");
+            return;
+          }
+          const float wt = id(water_temp).state;
+          int dur;
+          if (wt < id(num_water_low).state) dur = 2;
+          else if (wt < id(num_water_setpoint).state) dur = (int) roundf(wt / 3.0f);
+          else dur = (int) roundf(wt / 2.0f);
+
+          int start = 15 - (int) roundf(dur / 2.0f);
+          if (start < (int) id(num_filt_start_min).state)
+            start = (int) id(num_filt_start_min).state;
+          int stop = start + dur;
+          if (stop > (int) id(num_filt_stop_max).state)
+            stop = (int) id(num_filt_stop_max).state;
+
+          id(filt_duration_h) = dur;
+          id(filt_start_h) = start;
+          id(filt_stop_h) = stop;
+          ESP_LOGI("poolmaster", "Filtration calculee: %dh (%dh -> %dh, eau %.1f C)",
+                   dur, start, stop, wt);

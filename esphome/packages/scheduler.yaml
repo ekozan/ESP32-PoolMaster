@@ -1,0 +1,53 @@
+# ==============================================================================
+# Ordonnancement : horloge, tâches périodiques et enchaînement des traitements
+# ==============================================================================
+# Ce paquet ne contient aucune logique métier : il se contente d'appeler, dans
+# le bon ordre, les scripts définis par les paquets fonctionnels. C'est le seul
+# endroit où l'ordre des traitements est décidé — le modifier ici suffit.
+# ==============================================================================
+time:
+  - platform: sntp
+    id: sntp_time
+    timezone: Europe/Paris
+    on_time:
+      # Tick minute : filtration auto / antigel, puis activation des PID
+      - seconds: 0
+        minutes: '*'
+        then:
+          - script.execute: filtration_tick
+          - script.execute: regulation_tick
+      # Calcul quotidien de la plage de filtration à 15h05 (l'eau a circulé,
+      # la température est représentative — cf. firmware d'origine à 15h)
+      - seconds: 0
+        minutes: 5
+        hours: 15
+        then:
+          - script.execute: compute_filtration_schedule
+      # Remise à zéro quotidienne des compteurs de marche
+      - seconds: 0
+        minutes: 0
+        hours: 0
+        then:
+          - script.execute: daily_reset
+
+interval:
+  # Boucle de régulation 1 s : équivalent des tâches pHRegulation /
+  # OrpRegulation du firmware d'origine.
+  # L'ordre compte : les sécurités arment les drapeaux d'erreur et peuvent
+  # couper la filtration, ce que les traitements suivants doivent voir.
+  - interval: 1s
+    then:
+      - script.execute: safety_tick        # surpression, temps de marche, bacs
+      - script.execute: ph_dosing_tick     # PID pH fenêtré
+      - script.execute: orp_dosing_tick    # PID ORP fenêtré
+      - script.execute: swg_tick           # électrolyseur au sel
+      - script.execute: robot_tick         # robot de nettoyage
+
+script:
+  - id: daily_reset
+    then:
+      - lambda: |-
+          id(ph_uptime_s) = 0;
+          id(chl_uptime_s) = 0;
+          id(fill_uptime_s) = 0;
+          id(robot_done) = false;

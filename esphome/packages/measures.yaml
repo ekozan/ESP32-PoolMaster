@@ -1,0 +1,172 @@
+# ==============================================================================
+# Mesures : pH, ORP, pression (ADS1115) et températures eau / air (DS18B20)
+# ==============================================================================
+# Chaîne de mesure identique à l'origine : tension brute filtrée par une
+# médiane sur 11 échantillons, puis calibration linéaire
+#   valeur = tension(V) × C0 + C1
+# Les coefficients C0/C1 sont réglables depuis Home Assistant (fin de fichier).
+# ==============================================================================
+sensor:
+  # --- Tensions brutes ADS1115 (A0 = ORP, A1 = pH, A2 = PSI, gain 6.144 V) ---
+  - platform: ads1115
+    ads1115_id: ads1
+    multiplexer: 'A0_GND'
+    gain: 6.144
+    id: orp_volts
+    internal: true
+    update_interval: 1s
+    filters:
+      - median:
+          window_size: 11
+          send_every: 1
+          send_first_at: 1
+  - platform: ads1115
+    ads1115_id: ads1
+    multiplexer: 'A1_GND'
+    gain: 6.144
+    id: ph_volts
+    internal: true
+    update_interval: 1s
+    filters:
+      - median:
+          window_size: 11
+          send_every: 1
+          send_first_at: 1
+  - platform: ads1115
+    ads1115_id: ads1
+    multiplexer: 'A2_GND'
+    gain: 6.144
+    id: psi_volts
+    internal: true
+    update_interval: 1s
+    filters:
+      - median:
+          window_size: 11
+          send_every: 1
+          send_first_at: 1
+
+  # --- Valeurs calibrées ---
+  - platform: template
+    name: "pH"
+    id: ph_val
+    icon: mdi:ph
+    accuracy_decimals: 2
+    state_class: measurement
+    update_interval: 2s
+    lambda: |-
+      if (!id(ph_volts).has_state()) return {};
+      return id(ph_volts).state * id(num_ph_c0).state + id(num_ph_c1).state;
+  - platform: template
+    name: "ORP"
+    id: orp_val
+    unit_of_measurement: "mV"
+    icon: mdi:flash
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 2s
+    lambda: |-
+      if (!id(orp_volts).has_state()) return {};
+      return id(orp_volts).state * id(num_orp_c0).state + id(num_orp_c1).state;
+  - platform: template
+    name: "Pression filtration"
+    id: psi_val
+    unit_of_measurement: "bar"
+    device_class: pressure
+    icon: mdi:gauge
+    accuracy_decimals: 2
+    state_class: measurement
+    update_interval: 2s
+    lambda: |-
+      if (!id(psi_volts).has_state()) return {};
+      float v = id(psi_volts).state * id(num_psi_c0).state + id(num_psi_c1).state;
+      return v < 0 ? 0.0f : v;
+
+  # --- Températures DS18B20 ---
+  # Un seul capteur par bus : l'adresse n'est pas nécessaire. Si vous en avez
+  # plusieurs, ajoutez `address: 0x...` (les adresses d'origine sont dans
+  # src/Loops.cpp).
+  - platform: dallas_temp
+    one_wire_id: ow_water
+    name: "Température eau"
+    id: water_temp
+    resolution: 12
+    update_interval: 10s
+    filters:
+      - filter_out: nan
+  - platform: dallas_temp
+    one_wire_id: ow_air
+    name: "Température air"
+    id: air_temp
+    resolution: 12
+    update_interval: 10s
+    filters:
+      - filter_out: nan
+
+# --- Calibration linéaire : valeur = tension(V) * C0 + C1 ---
+number:
+  - platform: template
+    name: "pH calibration C0"
+    id: num_ph_c0
+    min_value: -100
+    max_value: 100
+    step: 0.0001
+    initial_value: -2.50133333
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "pH calibration C1"
+    id: num_ph_c1
+    min_value: -100
+    max_value: 100
+    step: 0.0001
+    initial_value: 6.9
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "ORP calibration C0"
+    id: num_orp_c0
+    min_value: -2000
+    max_value: 2000
+    step: 0.01
+    initial_value: 431.03
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "ORP calibration C1"
+    id: num_orp_c1
+    min_value: -2000
+    max_value: 2000
+    step: 0.01
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "PSI calibration C0"
+    id: num_psi_c0
+    min_value: -100
+    max_value: 100
+    step: 0.0001
+    initial_value: 0.377923399
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "PSI calibration C1"
+    id: num_psi_c1
+    min_value: -100
+    max_value: 100
+    step: 0.0001
+    initial_value: -0.17634473
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config

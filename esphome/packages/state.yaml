@@ -1,0 +1,107 @@
+# ==============================================================================
+# État interne partagé entre les paquets (variables globales)
+# ==============================================================================
+# Ces variables sont l'équivalent des `storage` / variables statiques du
+# firmware d'origine. Elles sont regroupées ici parce qu'elles sont lues et
+# écrites par plusieurs paquets ; le paquet propriétaire de chaque groupe est
+# indiqué en commentaire.
+# ==============================================================================
+globals:
+  # --- Fenêtres PID : millis() de début de fenêtre + dose calculée en ms ---
+  # (regulation_ph.yaml)
+  - id: ph_win_start
+    type: uint32_t
+    initial_value: '0'
+  - id: ph_out_ms
+    type: float
+    initial_value: '0'
+  - id: ph_integ
+    type: float
+    initial_value: '0'
+  - id: ph_last_err
+    type: float
+    initial_value: '0'
+  # (regulation_orp.yaml)
+  - id: orp_win_start
+    type: uint32_t
+    initial_value: '0'
+  - id: orp_out_ms
+    type: float
+    initial_value: '0'
+  - id: orp_integ
+    type: float
+    initial_value: '0'
+  - id: orp_last_err
+    type: float
+    initial_value: '0'
+
+  # --- Compteurs de marche quotidiens en secondes (safety.yaml) ---
+  - id: ph_uptime_s
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: chl_uptime_s
+    type: int
+    restore_value: true
+    initial_value: '0'
+  - id: fill_uptime_s
+    type: int
+    restore_value: true
+    initial_value: '0'
+
+  # --- Volume consommé dans les bacs en litres, remis à zéro au remplissage ---
+  # (levels.yaml)
+  - id: ph_used_l
+    type: float
+    restore_value: true
+    initial_value: '0'
+  - id: chl_used_l
+    type: float
+    restore_value: true
+    initial_value: '0'
+
+  # --- Drapeaux d'erreur, effacés par « Acquitter les erreurs » (safety.yaml) ---
+  - id: psi_error
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: ph_uptime_error
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: chl_uptime_error
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+  - id: fill_uptime_error
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+  # --- Plage de filtration calculée, en heures entières (filtration.yaml) ---
+  - id: filt_start_h
+    type: int
+    restore_value: true
+    initial_value: '8'
+  - id: filt_stop_h
+    type: int
+    restore_value: true
+    initial_value: '13'
+  - id: filt_duration_h
+    type: int
+    restore_value: true
+    initial_value: '5'
+
+  # --- Divers ---
+  - id: antifreeze_on          # filtration.yaml
+    type: bool
+    initial_value: 'false'
+  - id: filt_started_ms        # filtration.yaml
+    type: uint32_t
+    initial_value: '0'
+  - id: robot_started_ms       # robot.yaml
+    type: uint32_t
+    initial_value: '0'
+  - id: robot_done             # robot.yaml
+    type: bool
+    initial_value: 'false'

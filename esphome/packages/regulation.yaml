@@ -1,0 +1,107 @@
+# ==============================================================================
+# Cadre commun aux régulations pH et ORP
+# ==============================================================================
+# Contient les modes « auto » (qui décident *quand* les boucles PID tournent)
+# et les seuils de température partagés. Les boucles elles-mêmes sont dans
+# regulation_ph.yaml et regulation_orp.yaml.
+#
+# Fenêtre de régulation : [début filtration + délai PID ; fin filtration[
+# Conditions : pas de mode hiver, eau au-dessus du seuil bas, filtration en
+# marche, pas de surpression.
+# ==============================================================================
+switch:
+  - platform: template
+    name: "Régulation pH auto"
+    id: sw_ph_auto
+    icon: mdi:ph
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+  - platform: template
+    name: "Régulation ORP auto"
+    id: sw_orp_auto
+    icon: mdi:flash-auto
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+
+number:
+  # Consignes de température : servent aussi au calcul de la durée de
+  # filtration (filtration.yaml).
+  - platform: template
+    name: "Consigne température eau"
+    id: num_water_setpoint
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer
+    min_value: 15
+    max_value: 35
+    step: 0.5
+    initial_value: 27
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "Seuil température eau basse"
+    id: num_water_low
+    unit_of_measurement: "°C"
+    icon: mdi:thermometer-low
+    min_value: 0
+    max_value: 20
+    step: 0.5
+    initial_value: 10
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "Délai démarrage PID"
+    id: num_delay_pid
+    unit_of_measurement: "min"
+    icon: mdi:timer-sand
+    min_value: 0
+    max_value: 59
+    step: 1
+    initial_value: 15
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+
+script:
+  # ----------------------------------------------------------------------------
+  # Tick minute : activation / désactivation automatique des boucles PID.
+  # ----------------------------------------------------------------------------
+  - id: regulation_tick
+    then:
+      - lambda: |-
+          auto t = id(sntp_time).now();
+          if (!t.is_valid()) return;
+          const int h = t.hour;
+          const int mins = t.hour * 60 + t.minute;
+          const bool winter = id(sw_winter_mode).state;
+
+          const bool in_reg_window =
+              mins >= id(filt_start_h) * 60 + (int) id(num_delay_pid).state &&
+              h < id(filt_stop_h);
+          const bool water_ok = id(water_temp).has_state() &&
+                                id(water_temp).state >= id(num_water_low).state;
+          const bool reg_ok = !winter && water_ok && id(filtration_pump).state &&
+                              in_reg_window && !id(psi_error);
+
+          if (id(sw_ph_auto).state) {
+            const bool want_ph = reg_ok && !id(ph_uptime_error) &&
+                                 !id(ph_tank_low).state;
+            if (want_ph && !id(sw_ph_pid).state) id(sw_ph_pid).turn_on();
+            if (!want_ph && id(sw_ph_pid).state) id(sw_ph_pid).turn_off();
+          }
+          if (id(sw_orp_auto).state && !id(sw_electrolyse_mode).state) {
+            const bool want_orp = reg_ok && !id(chl_uptime_error) &&
+                                  !id(chl_tank_low).state;
+            if (want_orp && !id(sw_orp_pid).state) id(sw_orp_pid).turn_on();
+            if (!want_orp && id(sw_orp_pid).state) id(sw_orp_pid).turn_off();
+          }
+          if (winter) {
+            if (id(sw_ph_pid).state) id(sw_ph_pid).turn_off();
+            if (id(sw_orp_pid).state) id(sw_orp_pid).turn_off();
+          }

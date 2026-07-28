@@ -26,6 +26,58 @@ Dans Home Assistant, l'appareil est détecté automatiquement via l'API native
 ESPHome (intégration « ESPHome »). Toutes les entités (mesures, pompes, modes,
 réglages) apparaissent sans configuration supplémentaire.
 
+## Organisation des fichiers
+
+La configuration est découpée en **paquets** ESPHome. `poolmaster.yaml` ne
+contient que ce qui dépend de votre installation (nom de l'appareil et
+brochage) puis assemble les paquets ; chaque paquet regroupe **une fonction de
+la piscine avec ses entités *et* sa logique**, plutôt que de séparer par type
+d'entité.
+
+```
+poolmaster.yaml            substitutions (brochage) + liste des paquets
+secrets.yaml               vos identifiants (non versionné)
+packages/
+  core.yaml                carte ESP32, WiFi, API, OTA, serveur web, diagnostics
+  buses.yaml               I2C (ADS1115, PCF8574) et les deux bus OneWire
+  state.yaml               variables globales partagées
+  scheduler.yaml           horloge SNTP + ordre d'exécution des traitements
+  measures.yaml            pH / ORP / pression / températures + calibration C0-C1
+  modes.yaml               mode automatique, mode hiver
+  filtration.yaml          pompe, plage horaire quotidienne, antigel
+  regulation.yaml          cadre commun pH/ORP (modes auto, seuils, activation)
+  regulation_ph.yaml       pompe pH + PID fenêtré REVERSE
+  regulation_orp.yaml      pompe Chlore + PID fenêtré DIRECT
+  electrolyse.yaml         électrolyseur au sel
+  robot.yaml               robot de nettoyage
+  levels.yaml              bacs, niveau piscine, pompe de remplissage
+  safety.yaml              surpression, temps de marche max, acquittement
+  auxiliary.yaml           relais libres R0 / R1
+  status_leds.yaml         LEDs PCF8574 + buzzer
+```
+
+Les paquets sont fusionnés par ESPHome : les identifiants (`id:`) sont visibles
+depuis n'importe quel paquet, et les substitutions de `poolmaster.yaml`
+s'appliquent partout. Pour retirer une fonction, il suffit de commenter la
+ligne correspondante dans `packages:`.
+
+### Où se décide l'ordre des traitements
+
+Toute la logique périodique passe par des `script:` appelés depuis
+`scheduler.yaml`, qui est le **seul** endroit où l'ordre est décidé :
+
+| Cadence | Enchaînement |
+|---|---|
+| 1 s | `safety_tick` → `ph_dosing_tick` → `orp_dosing_tick` → `swg_tick` → `robot_tick` |
+| 1 min | `filtration_tick` → `regulation_tick` |
+| 15h05 | `compute_filtration_schedule` |
+| 00h00 | `daily_reset` |
+| 3 s | rafraîchissement des LEDs et du buzzer (`status_leds.yaml`, indépendant) |
+
+`safety_tick` passe en premier parce qu'il arme les drapeaux d'erreur et peut
+couper la filtration : les traitements suivants doivent en tenir compte dans le
+même tick.
+
 ## Matériel pris en charge
 
 | Élément | Broche / adresse |

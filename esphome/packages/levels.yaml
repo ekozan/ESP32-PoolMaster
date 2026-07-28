@@ -1,0 +1,134 @@
+# ==============================================================================
+# Niveaux : bacs de produits, niveau piscine et pompe de remplissage
+# ==============================================================================
+# Contacts de niveau : contact ouvert = niveau bas (pull-up externe, broches
+# 34/36/39 sans pull-up interne, conformément au PCB PoolMaster).
+# Le remplissage des bacs n'est pas mesuré : il est estimé à partir du débit de
+# la pompe et de son temps de marche (compté par safety.yaml), et remis à 100 %
+# par les boutons « Bac rempli ».
+# ==============================================================================
+binary_sensor:
+  - platform: gpio
+    pin:
+      number: ${pin_ph_level}
+      mode: INPUT
+    name: "Bac pH niveau bas"
+    id: ph_tank_low
+    device_class: problem
+    filters:
+      - delayed_on: 2s
+      - delayed_off: 2s
+  - platform: gpio
+    pin:
+      number: ${pin_chl_level}
+      mode: INPUT
+    name: "Bac Chlore niveau bas"
+    id: chl_tank_low
+    device_class: problem
+    filters:
+      - delayed_on: 2s
+      - delayed_off: 2s
+  - platform: gpio
+    pin:
+      number: ${pin_pool_level}
+      mode: INPUT
+    name: "Niveau piscine bas"
+    id: pool_level_low
+    device_class: problem
+    filters:
+      - delayed_on: 5s
+      - delayed_off: 5s
+
+switch:
+  - platform: gpio
+    pin: ${pin_fill_pump}
+    name: "Pompe remplissage"
+    id: fill_pump
+    icon: mdi:water-pump
+    restore_mode: ALWAYS_OFF
+
+number:
+  - platform: template
+    name: "Débit pompe pH"
+    id: num_ph_flow
+    unit_of_measurement: "L/h"
+    min_value: 0.1
+    max_value: 10
+    step: 0.1
+    initial_value: 1.5
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "Débit pompe Chlore"
+    id: num_chl_flow
+    unit_of_measurement: "L/h"
+    min_value: 0.1
+    max_value: 10
+    step: 0.1
+    initial_value: 1.5
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "Volume bac pH"
+    id: num_ph_tank_vol
+    unit_of_measurement: "L"
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: 20
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "Volume bac Chlore"
+    id: num_chl_tank_vol
+    unit_of_measurement: "L"
+    min_value: 1
+    max_value: 100
+    step: 1
+    initial_value: 20
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+
+sensor:
+  - platform: template
+    name: "Niveau bac pH"
+    unit_of_measurement: "%"
+    icon: mdi:car-coolant-level
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      float pct = 100.0f * (1.0f - id(ph_used_l) / id(num_ph_tank_vol).state);
+      return pct < 0 ? 0.0f : pct;
+  - platform: template
+    name: "Niveau bac Chlore"
+    unit_of_measurement: "%"
+    icon: mdi:car-coolant-level
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: |-
+      float pct = 100.0f * (1.0f - id(chl_used_l) / id(num_chl_tank_vol).state);
+      return pct < 0 ? 0.0f : pct;
+
+button:
+  - platform: template
+    name: "Bac pH rempli"
+    icon: mdi:cup-water
+    on_press:
+      - lambda: |-
+          id(ph_used_l) = 0;
+          ESP_LOGI("poolmaster", "Bac pH marqué comme rempli");
+  - platform: template
+    name: "Bac Chlore rempli"
+    icon: mdi:cup-water
+    on_press:
+      - lambda: |-
+          id(chl_used_l) = 0;
+          ESP_LOGI("poolmaster", "Bac Chlore marqué comme rempli");

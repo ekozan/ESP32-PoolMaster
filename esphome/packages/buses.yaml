@@ -1,0 +1,24 @@
+# ==============================================================================
+# Bus matériels : I2C (ADS1115 + PCF8574) et les deux bus OneWire
+# ==============================================================================
+i2c:
+  sda: ${pin_sda}
+  scl: ${pin_scl}
+  scan: true
+
+ads1115:
+  - address: 0x48
+    id: ads1
+
+pcf8574:
+  - id: pcf_leds
+    address: 0x20
+    pcf8575: false
+
+one_wire:
+  - platform: gpio
+    pin: ${pin_ow_water}
+    id: ow_water
+  - platform: gpio
+    pin: ${pin_ow_air}
+    id: ow_air

@@ -1,0 +1,16 @@
+# ==============================================================================
+# Relais libres (équivalent de la commande {"Relay":[n,x]} de l'origine)
+# ==============================================================================
+switch:
+  - platform: gpio
+    pin: ${pin_relay_r0}
+    name: "Relais R0 (projecteur)"
+    id: relay_r0
+    icon: mdi:lightbulb
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: gpio
+    pin: ${pin_relay_r1}
+    name: "Relais R1"
+    id: relay_r1
+    icon: mdi:electric-switch
+    restore_mode: RESTORE_DEFAULT_OFF
