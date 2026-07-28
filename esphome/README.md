@@ -36,9 +36,11 @@ d'entité.
 
 ```
 poolmaster.yaml            substitutions (brochage) + liste des paquets
+exemple-webui-wifi-ota.yaml  variante : WiFi/OTA/serveur web détaillés
 secrets.yaml               vos identifiants (non versionné)
 packages/
-  core.yaml                carte ESP32, WiFi, API, OTA, serveur web, diagnostics
+  device.yaml              carte ESP32, framework, logger, diagnostics
+  network.yaml             WiFi, API Home Assistant, OTA, serveur web
   buses.yaml               I2C (ADS1115, PCF8574) et les deux bus OneWire
   state.yaml               variables globales partagées
   scheduler.yaml           horloge SNTP + ordre d'exécution des traitements
@@ -77,6 +79,50 @@ Toute la logique périodique passe par des `script:` appelés depuis
 `safety_tick` passe en premier parce qu'il arme les drapeaux d'erreur et peut
 couper la filtration : les traitements suivants doivent en tenir compte dans le
 même tick.
+
+### Remplacer la configuration réseau
+
+`exemple-webui-wifi-ota.yaml` est un second fichier d'entrée : il importe les
+mêmes paquets fonctionnels mais **omet `network.yaml`** et définit à la place
+son propre WiFi (IP fixe, puissance d'émission réduite), l'OTA avec mode sans
+échec, et le serveur web avec authentification. C'est le point de départ
+conseillé pour une installation réelle.
+
+Attention en surchargeant un paquet : la fusion ESPHome traite les
+dictionnaires clé par clé (le fichier principal gagne) mais **concatène les
+listes**. Redéfinir `wifi:` ou `web_server:` fonctionne ; redéfinir `ota:` en
+changeant le port produit deux entrées et l'erreur *« Only a single port is
+supported »*. D'où la séparation `device.yaml` / `network.yaml`.
+
+### Place disponible en flash
+
+L'ESP32 DevKit v1 a **4 Mo** de flash. La table de partitions générée par
+ESPHome (`partitions.csv`, ESP-IDF) la découpe ainsi :
+
+| Partition | Taille | Rôle |
+|---|---|---|
+| `otadata` | 8 Ko | quelle image démarrer |
+| `phy_init` | 4 Ko | calibration radio |
+| `app0` | **1,75 Mo** | image applicative active |
+| `app1` | **1,75 Mo** | image de réception OTA |
+| `nvs` | 448 Ko | réglages persistants (`restore_value: true`) |
+
+Deux points en découlent :
+
+- **L'OTA est déjà provisionné.** Les deux emplacements `app0`/`app1` sont
+  réservés d'office : une mise à jour est écrite dans l'emplacement inactif
+  puis le démarrage bascule dessus. L'OTA ne « prend » donc pas de place en
+  plus — c'est le coût d'entrée de cette table de partitions, actif que l'on
+  s'en serve ou non. Le budget réel du firmware est **1,75 Mo**, pas 4 Mo.
+- **Le serveur web et le WiFi tiennent largement.** Le WiFi et l'API sont de
+  toute façon obligatoires ici (c'est par eux que passe Home Assistant). Le
+  serveur web ESPHome charge par défaut son JS/CSS depuis le CDN `esphome.io`
+  et ne coûte donc que le serveur HTTP embarqué. L'option `local: true` embarque
+  ces ressources dans le firmware — comptez quelques dizaines de kilo-octets de
+  plus, à réserver aux installations sans accès Internet.
+
+Les réglages persistants (consignes, calibrations, compteurs) vivent dans la
+partition `nvs` de 448 Ko et ne consomment rien sur le budget applicatif.
 
 ## Matériel pris en charge
 

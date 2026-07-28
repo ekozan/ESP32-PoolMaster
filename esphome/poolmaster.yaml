@@ -40,7 +40,8 @@ substitutions:
 
 packages:
   # --- Socle ---
-  core:            !include packages/core.yaml        # carte, WiFi, API, OTA
+  device:          !include packages/device.yaml      # carte, logger, diagnostics
+  network:         !include packages/network.yaml     # WiFi, API, OTA, serveur web
   buses:           !include packages/buses.yaml       # I2C, ADS1115, OneWire
   state:           !include packages/state.yaml       # variables partagées
   scheduler:       !include packages/scheduler.yaml   # horloge + ordre des ticks
