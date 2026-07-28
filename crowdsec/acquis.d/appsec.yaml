@@ -1,0 +1,10 @@
+# Point d'écoute AppSec (WAF) — référencé par le bouncer (ex. le composant
+# remédiation nginx/traefik/caddy pointe vers ce port).
+# Adapter listen_addr/port à votre installation existante.
+listen_addr: 0.0.0.0:7422
+source: appsec
+appsec_configs:
+  - crowdsecurity/appsec-default   # config de base du hub (adapter si besoin)
+  - custom/ente-s3-whitelist       # fix faux positif Ente/S3 (règle CRS 901340)
+labels:
+  type: appsec

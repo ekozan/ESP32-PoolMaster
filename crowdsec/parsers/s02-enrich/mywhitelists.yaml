@@ -1,0 +1,14 @@
+# Whitelist "classique" (niveau parsing) : les événements provenant de ces
+# sources sont ignorés avant même l'évaluation des scénarios.
+# À utiliser pour vos IPs de confiance (LAN, VPN, IP fixe...).
+# Décommenter et adapter — tel quel, ce fichier ne whitelist rien.
+name: custom/mywhitelists
+description: "Whitelist des IPs de confiance"
+whitelist:
+  reason: "IPs de confiance (LAN / VPN / admin)"
+  ip: []
+    # - "203.0.113.42"        # exemple : IP fixe maison
+  cidr:
+    - "192.168.0.0/16"        # LAN
+    - "10.0.0.0/8"            # VPN / réseaux privés
+    - "172.16.0.0/12"         # réseaux privés / docker

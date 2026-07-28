@@ -1,0 +1,14 @@
+# Whitelist "postoverflow" : évaluée APRÈS qu'un scénario a déclenché,
+# juste avant la décision de ban. Moins coûteux que les whitelists de
+# parsing (ne s'exécute que sur les overflows) et pratique pour
+# whitelister par rDNS ou par scénario.
+# Décommenter et adapter — tel quel, ce fichier ne whitelist rien.
+name: custom/postoverflow-whitelists
+description: "Whitelist post-overflow (dernière chance avant ban)"
+whitelist:
+  reason: "Faux positifs connus"
+  expression: []
+    # Exemple : ne jamais bannir sur un scénario précis :
+    # - evt.Overflow.Alert.GetScenario() == "crowdsecurity/http-probing"
+    # Exemple : ne jamais bannir une IP précise quel que soit le scénario :
+    # - any(evt.Overflow.Alert.GetSources(), {. == "203.0.113.42"})
