@@ -38,6 +38,8 @@ substitutions:
   pin_ow_water: GPIO19     # Bus OneWire température eau
   pin_sda: GPIO21
   pin_scl: GPIO22
+  pin_nextion_tx: GPIO17   # Écran Nextion (Serial2 du firmware d'origine)
+  pin_nextion_rx: GPIO16
 
 # ==============================================================================
 # Import des paquets
@@ -48,6 +50,7 @@ packages:
   state:           !include packages/state.yaml
   scheduler:       !include packages/scheduler.yaml
   measures:        !include packages/measures.yaml
+  calibration:     !include packages/calibration.yaml
   modes:           !include packages/modes.yaml
   filtration:      !include packages/filtration.yaml
   regulation:      !include packages/regulation.yaml
@@ -59,6 +62,7 @@ packages:
   safety:          !include packages/safety.yaml
   auxiliary:       !include packages/auxiliary.yaml
   status_leds:     !include packages/status_leds.yaml
+  nextion:         !include packages/nextion.yaml
   # network:       volontairement absent — remplacé par les blocs ci-dessous
 
 # --- Variante : import distant depuis GitHub --------------------------------

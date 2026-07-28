@@ -1,0 +1,319 @@
+# ==============================================================================
+# Calibration multi-points embarquée (pH, ORP, pression)
+# ==============================================================================
+# Remplace la saisie manuelle des coefficients C0/C1 par une vraie calibration
+# faite depuis Home Assistant, l'interface web ou l'écran Nextion.
+#
+# Mode d'emploi, pour chaque sonde :
+#   1. Plonger la sonde dans une solution étalon (pH 7,01 ; pH 4,01 ; ORP 470 mV…)
+#      et attendre que la mesure soit stable.
+#   2. Saisir la valeur de l'étalon dans « … référence ».
+#   3. Bouton « … enregistrer le point ».
+#   4. Recommencer avec un second étalon (et jusqu'à 8 points).
+#   5. Bouton « … calculer la calibration » : la régression linéaire est faite
+#      à bord et écrit C0/C1.
+#
+# Nombre de points :
+#   1 point   -> seul l'offset est corrigé, la pente est conservée. Utile pour
+#                un simple recalage sur tampon pH 7.
+#   2 points+ -> régression linéaire par moindres carrés sur tous les points.
+#
+# Les points sont conservés en NVS : ils survivent aux coupures et aux OTA, on
+# peut donc étaler une calibration sur plusieurs jours.
+# ==============================================================================
+globals:
+  # --- pH ---
+  - id: cal_ph_v            # tensions relevées (V)
+    type: float[8]
+    restore_value: true
+  - id: cal_ph_ref          # valeurs étalon correspondantes
+    type: float[8]
+    restore_value: true
+  - id: cal_ph_n
+    type: int
+    restore_value: true
+    initial_value: '0'
+  # --- ORP ---
+  - id: cal_orp_v
+    type: float[8]
+    restore_value: true
+  - id: cal_orp_ref
+    type: float[8]
+    restore_value: true
+  - id: cal_orp_n
+    type: int
+    restore_value: true
+    initial_value: '0'
+  # --- Pression ---
+  - id: cal_psi_v
+    type: float[8]
+    restore_value: true
+  - id: cal_psi_ref
+    type: float[8]
+    restore_value: true
+  - id: cal_psi_n
+    type: int
+    restore_value: true
+    initial_value: '0'
+
+number:
+  - platform: template
+    name: "pH référence (solution étalon)"
+    id: num_cal_ph_ref
+    icon: mdi:test-tube
+    min_value: 0
+    max_value: 14
+    step: 0.01
+    initial_value: 7.01
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "ORP référence (solution étalon)"
+    id: num_cal_orp_ref
+    unit_of_measurement: "mV"
+    icon: mdi:test-tube
+    min_value: 0
+    max_value: 1000
+    step: 1
+    initial_value: 470
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    name: "Pression référence (manomètre)"
+    id: num_cal_psi_ref
+    unit_of_measurement: "bar"
+    icon: mdi:test-tube
+    min_value: 0
+    max_value: 5
+    step: 0.01
+    initial_value: 0
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+
+sensor:
+  - platform: template
+    name: "Points de calibration pH"
+    id: sens_cal_ph_n
+    icon: mdi:format-list-numbered
+    accuracy_decimals: 0
+    update_interval: 10s
+    entity_category: diagnostic
+    lambda: 'return id(cal_ph_n);'
+  - platform: template
+    name: "Points de calibration ORP"
+    id: sens_cal_orp_n
+    icon: mdi:format-list-numbered
+    accuracy_decimals: 0
+    update_interval: 10s
+    entity_category: diagnostic
+    lambda: 'return id(cal_orp_n);'
+  - platform: template
+    name: "Points de calibration Pression"
+    id: sens_cal_psi_n
+    icon: mdi:format-list-numbered
+    accuracy_decimals: 0
+    update_interval: 10s
+    entity_category: diagnostic
+    lambda: 'return id(cal_psi_n);'
+
+button:
+  # --- pH ---
+  - platform: template
+    name: "pH — enregistrer le point"
+    icon: mdi:plus-circle
+    on_press:
+      - lambda: |-
+          if (!id(ph_volts).has_state()) {
+            ESP_LOGW("calib", "pH: pas de mesure disponible");
+            return;
+          }
+          if (id(cal_ph_n) >= 8) {
+            ESP_LOGW("calib", "pH: 8 points maximum, effacez d'abord");
+            return;
+          }
+          const int i = id(cal_ph_n);
+          id(cal_ph_v)[i]   = id(ph_volts).state;
+          id(cal_ph_ref)[i] = id(num_cal_ph_ref).state;
+          id(cal_ph_n) = i + 1;
+          ESP_LOGI("calib", "pH point %d: %.4f V -> %.2f", i + 1,
+                   id(cal_ph_v)[i], id(cal_ph_ref)[i]);
+  - platform: template
+    name: "pH — calculer la calibration"
+    icon: mdi:calculator-variant
+    on_press:
+      - script.execute: cal_compute_ph
+  - platform: template
+    name: "pH — effacer les points"
+    icon: mdi:delete
+    on_press:
+      - lambda: |-
+          id(cal_ph_n) = 0;
+          ESP_LOGI("calib", "pH: points de calibration effaces");
+
+  # --- ORP ---
+  - platform: template
+    name: "ORP — enregistrer le point"
+    icon: mdi:plus-circle
+    on_press:
+      - lambda: |-
+          if (!id(orp_volts).has_state()) {
+            ESP_LOGW("calib", "ORP: pas de mesure disponible");
+            return;
+          }
+          if (id(cal_orp_n) >= 8) {
+            ESP_LOGW("calib", "ORP: 8 points maximum, effacez d'abord");
+            return;
+          }
+          const int i = id(cal_orp_n);
+          id(cal_orp_v)[i]   = id(orp_volts).state;
+          id(cal_orp_ref)[i] = id(num_cal_orp_ref).state;
+          id(cal_orp_n) = i + 1;
+          ESP_LOGI("calib", "ORP point %d: %.4f V -> %.0f mV", i + 1,
+                   id(cal_orp_v)[i], id(cal_orp_ref)[i]);
+  - platform: template
+    name: "ORP — calculer la calibration"
+    icon: mdi:calculator-variant
+    on_press:
+      - script.execute: cal_compute_orp
+  - platform: template
+    name: "ORP — effacer les points"
+    icon: mdi:delete
+    on_press:
+      - lambda: |-
+          id(cal_orp_n) = 0;
+          ESP_LOGI("calib", "ORP: points de calibration effaces");
+
+  # --- Pression ---
+  - platform: template
+    name: "Pression — enregistrer le point"
+    icon: mdi:plus-circle
+    on_press:
+      - lambda: |-
+          if (!id(psi_volts).has_state()) {
+            ESP_LOGW("calib", "PSI: pas de mesure disponible");
+            return;
+          }
+          if (id(cal_psi_n) >= 8) {
+            ESP_LOGW("calib", "PSI: 8 points maximum, effacez d'abord");
+            return;
+          }
+          const int i = id(cal_psi_n);
+          id(cal_psi_v)[i]   = id(psi_volts).state;
+          id(cal_psi_ref)[i] = id(num_cal_psi_ref).state;
+          id(cal_psi_n) = i + 1;
+          ESP_LOGI("calib", "PSI point %d: %.4f V -> %.2f bar", i + 1,
+                   id(cal_psi_v)[i], id(cal_psi_ref)[i]);
+  - platform: template
+    name: "Pression — calculer la calibration"
+    icon: mdi:calculator-variant
+    on_press:
+      - script.execute: cal_compute_psi
+  - platform: template
+    name: "Pression — effacer les points"
+    icon: mdi:delete
+    on_press:
+      - lambda: |-
+          id(cal_psi_n) = 0;
+          ESP_LOGI("calib", "PSI: points de calibration effaces");
+
+script:
+  # ----------------------------------------------------------------------------
+  # Régression linéaire par moindres carrés : ref = C0 * tension + C1
+  #
+  # On écrit le résultat via make_call() plutôt que publish_state() : c'est le
+  # chemin qui déclenche la sauvegarde en NVS des `number` en restore_value,
+  # sans quoi la calibration serait perdue au redémarrage.
+  # ----------------------------------------------------------------------------
+  - id: cal_compute_ph
+    then:
+      - lambda: |-
+          const int n = id(cal_ph_n);
+          if (n < 1) { ESP_LOGW("calib", "pH: aucun point enregistre"); return; }
+
+          float c0, c1;
+          if (n == 1) {
+            // Un seul point : on conserve la pente et on ne recale que l'offset.
+            c0 = id(num_ph_c0).state;
+            c1 = id(cal_ph_ref)[0] - c0 * id(cal_ph_v)[0];
+          } else {
+            double sx = 0, sy = 0, sxx = 0, sxy = 0;
+            for (int i = 0; i < n; i++) {
+              const double x = id(cal_ph_v)[i], y = id(cal_ph_ref)[i];
+              sx += x; sy += y; sxx += x * x; sxy += x * y;
+            }
+            const double den = n * sxx - sx * sx;
+            if (fabs(den) < 1e-12) {
+              ESP_LOGE("calib", "pH: points trop proches, regression impossible");
+              return;
+            }
+            c0 = (float)((n * sxy - sx * sy) / den);
+            c1 = (float)((sy - c0 * sx) / n);
+          }
+
+          auto call0 = id(num_ph_c0).make_call(); call0.set_value(c0); call0.perform();
+          auto call1 = id(num_ph_c1).make_call(); call1.set_value(c1); call1.perform();
+          ESP_LOGI("calib", "pH calibre sur %d point(s): C0=%.6f C1=%.6f", n, c0, c1);
+
+  - id: cal_compute_orp
+    then:
+      - lambda: |-
+          const int n = id(cal_orp_n);
+          if (n < 1) { ESP_LOGW("calib", "ORP: aucun point enregistre"); return; }
+
+          float c0, c1;
+          if (n == 1) {
+            c0 = id(num_orp_c0).state;
+            c1 = id(cal_orp_ref)[0] - c0 * id(cal_orp_v)[0];
+          } else {
+            double sx = 0, sy = 0, sxx = 0, sxy = 0;
+            for (int i = 0; i < n; i++) {
+              const double x = id(cal_orp_v)[i], y = id(cal_orp_ref)[i];
+              sx += x; sy += y; sxx += x * x; sxy += x * y;
+            }
+            const double den = n * sxx - sx * sx;
+            if (fabs(den) < 1e-12) {
+              ESP_LOGE("calib", "ORP: points trop proches, regression impossible");
+              return;
+            }
+            c0 = (float)((n * sxy - sx * sy) / den);
+            c1 = (float)((sy - c0 * sx) / n);
+          }
+
+          auto call0 = id(num_orp_c0).make_call(); call0.set_value(c0); call0.perform();
+          auto call1 = id(num_orp_c1).make_call(); call1.set_value(c1); call1.perform();
+          ESP_LOGI("calib", "ORP calibre sur %d point(s): C0=%.4f C1=%.4f", n, c0, c1);
+
+  - id: cal_compute_psi
+    then:
+      - lambda: |-
+          const int n = id(cal_psi_n);
+          if (n < 1) { ESP_LOGW("calib", "PSI: aucun point enregistre"); return; }
+
+          float c0, c1;
+          if (n == 1) {
+            c0 = id(num_psi_c0).state;
+            c1 = id(cal_psi_ref)[0] - c0 * id(cal_psi_v)[0];
+          } else {
+            double sx = 0, sy = 0, sxx = 0, sxy = 0;
+            for (int i = 0; i < n; i++) {
+              const double x = id(cal_psi_v)[i], y = id(cal_psi_ref)[i];
+              sx += x; sy += y; sxx += x * x; sxy += x * y;
+            }
+            const double den = n * sxx - sx * sx;
+            if (fabs(den) < 1e-12) {
+              ESP_LOGE("calib", "PSI: points trop proches, regression impossible");
+              return;
+            }
+            c0 = (float)((n * sxy - sx * sy) / den);
+            c1 = (float)((sy - c0 * sx) / n);
+          }
+
+          auto call0 = id(num_psi_c0).make_call(); call0.set_value(c0); call0.perform();
+          auto call1 = id(num_psi_c1).make_call(); call1.set_value(c1); call1.perform();
+          ESP_LOGI("calib", "PSI calibre sur %d point(s): C0=%.6f C1=%.6f", n, c0, c1);

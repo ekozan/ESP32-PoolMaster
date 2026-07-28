@@ -45,7 +45,8 @@ packages/
   buses.yaml               I2C (ADS1115, PCF8574) et les deux bus OneWire
   state.yaml               variables globales partagées
   scheduler.yaml           horloge SNTP + ordre d'exécution des traitements
-  measures.yaml            pH / ORP / pression / températures + calibration C0-C1
+  measures.yaml            pH / ORP / pression / températures + coefficients C0-C1
+  calibration.yaml         calibration multi-points embarquée (régression)
   modes.yaml               mode automatique, mode hiver
   filtration.yaml          pompe, plage horaire quotidienne, antigel
   regulation.yaml          cadre commun pH/ORP (modes auto, seuils, activation)
@@ -57,6 +58,7 @@ packages/
   safety.yaml              surpression, temps de marche max, acquittement
   auxiliary.yaml           relais libres R0 / R1
   status_leds.yaml         LEDs PCF8574 + buzzer
+  nextion.yaml             écran tactile Nextion (protocole d'origine)
 ```
 
 Les paquets sont fusionnés par ESPHome : les identifiants (`id:`) sont visibles
@@ -131,11 +133,11 @@ nécessaire pour changer une consigne.
 
 | Type | Nombre | Exemples |
 |---|---|---|
-| `number` | 31 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, volumes et débits des bacs, calibrations C0/C1 |
+| `number` | 34 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, volumes et débits des bacs, coefficients C0/C1, valeurs des étalons de calibration |
 | `switch` | 16 | mode auto, mode hiver, pompes, PID pH/ORP, mode électrolyseur, relais R0/R1, buzzer |
-| `button` | 5 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, redémarrer |
+| `button` | 14 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, redémarrer, et 9 boutons de calibration (enregistrer / calculer / effacer × 3 sondes) |
 
-Les 31 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
+Les 34 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
 `restore_value: true` : la valeur est écrite dans la partition `nvs` et
 survit aux coupures de courant comme aux mises à jour OTA. Les valeurs
 `initial_value` du YAML ne servent qu'au tout premier démarrage.
@@ -147,6 +149,57 @@ dans les bacs, plage de filtration calculée) sont dans le même cas — voir
 Sont en revanche volontairement **non** persistants : les drapeaux d'erreur
 (`psi_error`, `ph_uptime_error`…), qui repartent à zéro au démarrage plutôt
 que de laisser un défaut ancien bloquer la régulation après un reboot.
+
+### Calibration multi-points embarquée
+
+Les coefficients `C0`/`C1` (`valeur = tension × C0 + C1`) peuvent être calculés
+à bord au lieu d'être saisis à la main. Pour chaque sonde (pH, ORP, pression) :
+
+1. plonger la sonde dans une solution étalon et attendre la stabilisation ;
+2. saisir la valeur de l'étalon dans « … référence » ;
+3. bouton « … enregistrer le point » ;
+4. recommencer avec un autre étalon (jusqu'à 8 points) ;
+5. bouton « … calculer la calibration ».
+
+| Points enregistrés | Traitement |
+|---|---|
+| 1 | seul l'offset est corrigé, la pente est conservée — recalage rapide sur tampon pH 7 |
+| 2 et plus | régression linéaire par moindres carrés sur l'ensemble des points |
+
+Les points sont stockés en NVS : ils survivent aux coupures et aux OTA, une
+calibration peut donc s'étaler sur plusieurs jours. Le résultat est écrit via
+`make_call()` et non `publish_state()`, seul chemin qui déclenche la sauvegarde
+persistante des `number`. Un capteur de diagnostic indique le nombre de points
+enregistrés par sonde.
+
+### Écran Nextion
+
+Le fichier HMI d'origine (`Nextion/PoolMaster_Nextion_V5.0/`) est réutilisé
+**tel quel**. Plutôt que le composant `nextion` d'ESPHome, `packages/nextion.yaml`
+reproduit exactement le protocole de l'ancien firmware sur un UART brut
+(TX GPIO17 / RX GPIO16, les broches de `Serial2`) :
+
+- **ESP32 → écran** : `objet.val=123` / `objet.txt="texte"` suivis de trois `0xFF` ;
+- **écran → ESP32** : trames `'#' <len> <groupe> <params…>` émises par les
+  `printh 23 …` du HMI. Groupe `0x50` = changement de page, `0x53` = action.
+  Un paramètre = bascule, deux = consigne explicite.
+
+La séquence de démarrage rejoue la resynchronisation de débit du firmware
+d'origine (`rest` renvoie l'écran à 9600 bauds, on lui réordonne 115200), sans
+laquelle la liaison reste muette après un reset.
+
+**Ce qui est porté** : pages Splash et Home (mesures, jauges, écarts pH/ORP),
+bitmap des 32 états — voyants, pompes, modes, erreurs —, horloge, et les
+actions de commande : filtration, pompes pH/Chlore, modes auto, mode hiver,
+robot, éclairage, relais libre, pompe de remplissage, électrolyseur,
+acquittement des erreurs, et les boutons de menu à trois états (Marche / Arrêt
+/ Auto).
+
+**Ce qui ne l'est pas** : les pages de configuration profondes — scan et
+configuration WiFi, MQTT, SMTP, clavier numérique, graphiques d'historique,
+calibration depuis l'écran, choix de la langue. Ces pages s'afficheront mais
+leurs actions seront journalisées en `action non portee` sans effet. La
+calibration reste accessible depuis Home Assistant et l'interface web.
 
 ### Place disponible en flash
 
@@ -284,18 +337,11 @@ vers un broker MQTT, avec les topics standard ESPHome.
 
 ## Non porté (volontairement)
 
-- **Écran Nextion** : l'interface locale n'est pas portée (le HMI d'origine
-  compte des dizaines de pages). ESPHome possède un composant
-  [`nextion`](https://esphome.io/components/display/nextion.html) si vous
-  souhaitez recréer une interface locale ; sinon l'interface de référence est
-  Home Assistant (+ le serveur web embarqué sur le port 80).
 - **API MQTT JSON historique** (`Home/Pool/Meas1`, `Set1`… et bitmaps `IO`) :
   remplacée par les entités natives ci-dessus. Les dashboards
   HomeAssistant/NodeRed existants basés sur ces topics doivent être adaptés.
 - **Notifications SMTP** : à réaliser côté Home Assistant (automatisations sur
   les entités `binary_sensor` d'erreur).
-- **Calibration multi-points embarquée** : la régression linéaire se calcule
-  hors ligne (tableur) et les coefficients C0/C1 se saisissent directement.
 - **Historique 12 h embarqué** : l'historisation est assurée par Home
   Assistant/InfluxDB.
 

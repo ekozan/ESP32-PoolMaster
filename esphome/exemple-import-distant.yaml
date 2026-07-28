@@ -37,6 +37,8 @@ substitutions:
   pin_ow_water: GPIO19     # Bus OneWire température eau
   pin_sda: GPIO21
   pin_scl: GPIO22
+  pin_nextion_tx: GPIO17   # Écran Nextion (Serial2 du firmware d'origine)
+  pin_nextion_rx: GPIO16
 
 # ==============================================================================
 # Import distant
@@ -71,6 +73,7 @@ packages:
       - esphome/packages/scheduler.yaml
       # --- Mesures et modes ---
       - esphome/packages/measures.yaml
+      - esphome/packages/calibration.yaml
       - esphome/packages/modes.yaml
       # --- Fonctions de la piscine ---
       - esphome/packages/filtration.yaml
@@ -84,6 +87,7 @@ packages:
       - esphome/packages/auxiliary.yaml
       # --- Interface locale ---
       - esphome/packages/status_leds.yaml
+      - esphome/packages/nextion.yaml
 
 # ==============================================================================
 # WiFi
@@ -121,7 +125,7 @@ captive_portal:
 # ==============================================================================
 # API Home Assistant
 # ==============================================================================
-# C'est par ici que remontent les 31 réglages, 16 interrupteurs et 5 boutons :
+# C'est par ici que remontent les 34 réglages, 16 interrupteurs et 14 boutons :
 # ils apparaissent tout seuls dans Home Assistant, sans YAML côté HA.
 api:
   encryption:

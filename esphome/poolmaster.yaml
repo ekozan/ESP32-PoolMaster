@@ -37,6 +37,8 @@ substitutions:
   pin_ow_water: GPIO19     # Bus OneWire température eau
   pin_sda: GPIO21
   pin_scl: GPIO22
+  pin_nextion_tx: GPIO17   # Écran Nextion (Serial2 du firmware d'origine)
+  pin_nextion_rx: GPIO16
 
 packages:
   # --- Socle ---
@@ -48,6 +50,7 @@ packages:
 
   # --- Mesures et modes ---
   measures:        !include packages/measures.yaml    # pH, ORP, PSI, températures
+  calibration:     !include packages/calibration.yaml # calibration multi-points
   modes:           !include packages/modes.yaml       # mode auto / mode hiver
 
   # --- Fonctions de la piscine ---
@@ -63,6 +66,7 @@ packages:
 
   # --- Interface locale ---
   status_leds:     !include packages/status_leds.yaml     # LEDs PCF8574 + buzzer
+  nextion:         !include packages/nextion.yaml         # écran tactile
 
 # --- MQTT optionnel -----------------------------------------------------------
 # L'intégration Home Assistant passe par l'API native ESPHome (recommandé).
