@@ -187,7 +187,9 @@ web_server:
   # Passez à `true` pour diagnostiquer une sonde.
   include_internal: false
 
-  # `local: true` embarque le JS/CSS dans le firmware au lieu de les charger
-  # depuis le CDN ESPHome. À activer si la piscine n'a pas d'accès Internet,
-  # au prix d'environ 30 à 60 Ko de flash supplémentaires.
+  # `local: true` embarque le JS dans le firmware au lieu de le charger depuis
+  # le CDN oi.esphome.io. À activer si la piscine n'a pas d'accès Internet.
+  # Coût mesuré : ~142 Ko en version 3, ~24 Ko en version 2 — soit environ 8 %
+  # ou 1,4 % de l'emplacement applicatif de 1,75 Mo. Si la place devient
+  # critique, `version: 2` + `local: true` est le compromis le plus économe.
   # local: true

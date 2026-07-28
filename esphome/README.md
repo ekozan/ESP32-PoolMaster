@@ -116,10 +116,20 @@ Deux points en découlent :
   s'en serve ou non. Le budget réel du firmware est **1,75 Mo**, pas 4 Mo.
 - **Le serveur web et le WiFi tiennent largement.** Le WiFi et l'API sont de
   toute façon obligatoires ici (c'est par eux que passe Home Assistant). Le
-  serveur web ESPHome charge par défaut son JS/CSS depuis le CDN `esphome.io`
-  et ne coûte donc que le serveur HTTP embarqué. L'option `local: true` embarque
-  ces ressources dans le firmware — comptez quelques dizaines de kilo-octets de
-  plus, à réserver aux installations sans accès Internet.
+  serveur web charge par défaut son JS depuis le CDN `oi.esphome.io` et ne
+  coûte donc que le serveur HTTP embarqué.
+
+  L'option `local: true` embarque ces ressources dans le firmware, pour une
+  installation sans accès Internet. Coût mesuré dans les sources d'ESPHome
+  2026.6.5 (tableaux d'octets de `server_index_*.h`) :
+
+  | `version:` | Assets embarqués avec `local: true` | Part des 1,75 Mo |
+  |---|---|---|
+  | 2 | ~24 Ko | ~1,4 % |
+  | 3 | ~142 Ko | ~8 % |
+
+  L'interface v3 est donc nettement plus lourde à embarquer que la v2, mais
+  reste très supportable sur cette carte.
 
 Les réglages persistants (consignes, calibrations, compteurs) vivent dans la
 partition `nvs` de 448 Ko et ne consomment rien sur le budget applicatif.
