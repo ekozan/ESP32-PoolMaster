@@ -505,7 +505,17 @@ esphome:
 
 Sur une machine avec beaucoup de mémoire, montez cette valeur (bornée au
 nombre de cœurs) pour accélérer nettement la compilation. ccache étant actif,
-seules les premières compilations sont longues.
+seules les premières compilations sont longues : une fois le cache chaud, une
+modification de YAML ne recompile que `main.cpp`, et la parallélisation compte
+beaucoup moins.
+
+Vous pouvez la régler **depuis votre fichier d'entrée** sans toucher au
+paquet — `esphome:` est un dictionnaire, donc le fichier principal l'emporte :
+
+```yaml
+esphome:
+  compile_process_limit: 3
+```
 
 Si le problème persiste malgré `1`, c'est que la machine est vraiment juste :
 ajoutez du swap, ou compilez depuis un PC avec `esphome run` puis flashez en
