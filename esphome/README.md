@@ -58,7 +58,8 @@ packages/
   safety.yaml              surpression, temps de marche max, acquittement
   auxiliary.yaml           relais libres R0 / R1
   status_leds.yaml         LEDs PCF8574 + buzzer
-  nextion.yaml             écran tactile Nextion (protocole d'origine)
+  nextion.yaml             écran Nextion (composant officiel ESPHome)
+  nextion-uart-brut.yaml   variante : protocole d'origine, HMI non modifié
 ```
 
 Les paquets sont fusionnés par ESPHome : les identifiants (`id:`) sont visibles
@@ -174,32 +175,141 @@ enregistrés par sonde.
 
 ### Écran Nextion
 
-Le fichier HMI d'origine (`Nextion/PoolMaster_Nextion_V5.0/`) est réutilisé
-**tel quel**. Plutôt que le composant `nextion` d'ESPHome, `packages/nextion.yaml`
-reproduit exactement le protocole de l'ancien firmware sur un UART brut
-(TX GPIO17 / RX GPIO16, les broches de `Serial2`) :
+Le paquet `packages/nextion.yaml` utilise le **composant `nextion` officiel**
+d'ESPHome, sur l'UART TX GPIO17 / RX GPIO16 (les broches de `Serial2` du
+firmware d'origine — aucun recâblage).
 
-- **ESP32 → écran** : `objet.val=123` / `objet.txt="texte"` suivis de trois `0xFF` ;
-- **écran → ESP32** : trames `'#' <len> <groupe> <params…>` émises par les
-  `printh 23 …` du HMI. Groupe `0x50` = changement de page, `0x53` = action.
-  Un paramètre = bascule, deux = consigne explicite.
+#### Ce qui marche sans rien changer
 
-La séquence de démarrage rejoue la resynchronisation de débit du firmware
-d'origine (`rest` renvoie l'écran à 9600 bauds, on lui réordonne 115200), sans
-laquelle la liaison reste muette après un reset.
+**Tout l'affichage.** Le composant envoie exactement les mêmes commandes que
+le firmware d'origine (`globals.vapH.txt="7.20"`, `pageHome.vaPercArrowPH.val=73`,
+le bitmap `globals.vaSwitches.val`, l'horloge `rtc0..rtc5`). Vos 21 pages
+s'affichent comme avant.
 
-**Ce qui est porté** : pages Splash et Home (mesures, jauges, écarts pH/ORP),
-bitmap des 32 états — voyants, pompes, modes, erreurs —, horloge, et les
-actions de commande : filtration, pompes pH/Chlore, modes auto, mode hiver,
-robot, éclairage, relais libre, pompe de remplissage, électrolyseur,
-acquittement des erreurs, et les boutons de menu à trois états (Marche / Arrêt
-/ Auto).
+#### Ce qu'il faut modifier dans le HMI
 
-**Ce qui ne l'est pas** : les pages de configuration profondes — scan et
-configuration WiFi, MQTT, SMTP, clavier numérique, graphiques d'historique,
-calibration depuis l'écran, choix de la langue. Ces pages s'afficheront mais
-leurs actions seront journalisées en `action non portee` sans effet. La
-calibration reste accessible depuis Home Assistant et l'interface web.
+Le problème est dans le sens écran → ESP32. Le composant officiel réserve
+l'octet `0x23` — celui que le protocole EasyNextion utilise comme début de
+trame — pour le code d'erreur Nextion « nom de variable trop long » :
+
+```cpp
+case 0x23:  // too long variable name
+  ESP_LOGW(TAG, "Variable name too long");
+```
+
+Vos `printh 23 02 53 XX` sont donc avalés comme des erreurs, et il n'existe
+aucun point d'entrée pour les récupérer. Trois modifications à faire dans
+Nextion Editor :
+
+**1. Débit série fixé à 115200**
+
+Dans l'onglet *Program.s* du HMI :
+
+```
+bauds=115200
+```
+
+`bauds` (avec un s) est persistant, contrairement à `baud`. Le composant
+officiel ne sait pas resynchroniser le débit après un `rest` comme le faisait
+le firmware d'origine ; l'écran doit donc démarrer directement au bon débit.
+
+**2. Annonce de page : `sendme` au lieu de `printh`**
+
+Dans le *Preinitialize Event* de chaque page, remplacer :
+
+```
+printh 23 02 50 02        ← à supprimer
+sendme                    ← à mettre à la place
+```
+
+`sendme` fait émettre à l'écran une trame `0x66` standard, que le composant
+remonte via `on_page`.
+
+**3. Boutons : protocole « custom sensor »**
+
+Dans le *Touch Release Event* de chaque bouton, remplacer le `printh 23 02 53 XX`
+par une trame nommée. Exemple pour la pompe de filtration en bascule :
+
+```
+printh 91
+prints "filt_pump",0
+printh 00
+printh 03 00 00 00
+printh FF FF FF
+```
+
+Structure : `91`, puis le nom en clair terminé par `,0`, puis un octet nul,
+puis la valeur sur **4 octets petit-boutiste**, puis le terminateur.
+
+Valeurs conventionnelles :
+
+| Valeur | Octets | Effet |
+|---|---|---|
+| 0 | `00 00 00 00` | Arrêt |
+| 1 | `01 00 00 00` | Marche |
+| 2 | `02 00 00 00` | Auto (boutons de menu à trois états) |
+| 3 | `03 00 00 00` | Bascule |
+
+Noms attendus par `packages/nextion.yaml`, à reprendre tels quels :
+
+| Nom | Action | Remplace |
+|---|---|---|
+| `auto_mode` | Mode automatique | `ENMC_FILT_MODE` (0) |
+| `ph_auto` | Régulation pH auto | `ENMC_PH_AUTOMODE` (1) |
+| `orp_auto` | Régulation ORP auto | `ENMC_ORP_AUTOMODE` (2) |
+| `filt_pump` | Pompe de filtration | `ENMC_FILT_PUMP` (4) |
+| `ph_pump` | Pompe pH | `ENMC_PH_PUMP` (5) |
+| `chl_pump` | Pompe Chlore | `ENMC_CHL_PUMP` (6) |
+| `winter_mode` | Mode hiver | `ENMC_WINTER_MODE` (8) |
+| `ph_pump_menu` | Bouton menu pH (3 états) | `ENMC_PH_PUMP_MENU` (11) |
+| `chl_pump_menu` | Bouton menu Chlore (3 états) | `ENMC_CHL_PUMP_MENU` (12) |
+| `filt_pump_menu` | Bouton menu Filtration (3 états) | `ENMC_FILT_PUMP_MENU` (13) |
+| `swg_mode` | Mode électrolyseur | `ENMC_SWG_MODE_MENU` (15) |
+| `swg` | Électrolyseur | — |
+| `robot` | Robot | `ENMC_ROBOT` (17) |
+| `lights` | Projecteur (relais R0) | `ENMC_LIGHTS` (18) |
+| `spare` | Relais R1 | `ENMC_SPARE` (19) |
+| `clear_alarms` | Acquitter les erreurs | `ENMC_CLEAR_ALARMS` (20) |
+| `fill_pump` | Pompe de remplissage | `ENMC_FILLING_PUMP` (21) |
+
+Un nom inconnu est journalisé (`action inconnue '…'`) sans effet — pratique
+pour vérifier au fur et à mesure dans les logs ESPHome.
+
+**Pourquoi des noms et pas les évènements tactiles standard ?** Le composant
+sait aussi remonter les touches via `on_touch`, en cochant « Send Component ID »
+dans Nextion Editor. Mais il faudrait alors relever le couple (page, id de
+composant) pour chaque bouton, et toute réorganisation du HMI décalerait ces
+identifiants. Le protocole nommé est plus verbeux à écrire une fois, et
+insensible aux remaniements ensuite.
+
+#### Ce que ça apporte
+
+- **Mise à jour du `.tft` par WiFi** (`tft_url` + action `nextion.upload_tft`),
+  au lieu de la carte SD.
+- Les plateformes `sensor`/`binary_sensor`/`switch`/`text_sensor` `nextion`,
+  qui lient une entité à un composant de l'écran sans écrire de lambda.
+- Les déclencheurs `on_sleep`, `on_wake`, `on_buffer_overflow`, et la gestion
+  de la veille (`touch_sleep_timeout`, `auto_wake_on_touch`).
+
+#### Si vous ne voulez pas toucher au HMI
+
+`packages/nextion-uart-brut.yaml` reproduit le protocole d'origine sur un UART
+brut et fonctionne avec l'écran **tel quel**. Remplacez la ligne du bloc
+`packages:` :
+
+```yaml
+  nextion:  !include packages/nextion-uart-brut.yaml
+```
+
+Vous perdez les avantages ci-dessus, mais aucune modification du HMI n'est
+nécessaire.
+
+#### Non porté dans les deux cas
+
+Les pages de configuration profondes — scan et configuration WiFi, MQTT, SMTP,
+clavier numérique, graphiques d'historique, calibration à l'écran, choix de la
+langue. La calibration reste accessible depuis Home Assistant et l'interface
+web.
 
 ### Place disponible en flash
 
