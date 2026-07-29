@@ -62,6 +62,29 @@ display:
     # Si la poignée de main `connect`/`comok` perturbe votre HMI :
     # skip_connection_handshake: true
 
+    # --- Mise à jour du .tft par WiFi (optionnel) ---------------------------
+    # Décommentez ces 4 lignes ET le bouton en fin de fichier : les deux vont
+    # ensemble, `upload_tft()` n'existe que si `tft_url` est défini (le code
+    # est sous #ifdef USE_NEXTION_TFT_UPLOAD).
+    #
+    # Hébergez le .tft dans le dossier `config/www/` de Home Assistant : il
+    # devient accessible sur http://<ha>:8123/local/<fichier>.tft
+    # Le fichier du dépôt est Nextion/tft/PoolMaster_Nextion_v6.tft (~2,4 Mo).
+    # Préférez une adresse IP à un nom .local, le mDNS depuis l'ESP32 étant
+    # moins fiable que depuis un PC.
+    #
+    # Ce que ça coûte : ESPHome réintègre le client HTTP de l'ESP-IDF
+    # (`esp_http_client`, exclu par défaut du build), donc firmware plus gros
+    # et compilation plus longue. Et en HTTPS la vérification du certificat est
+    # DÉSACTIVÉE (CONFIG_ESP_TLS_INSECURE) pour éviter d'embarquer une
+    # autorité — sans conséquence sur un réseau local, mais ne pointez pas
+    # cette URL vers Internet. Du simple HTTP sur le LAN est le plus sain.
+    #
+    # tft_url: "http://192.168.1.10:8123/local/poolmaster.tft"
+    # tft_upload_http_timeout: 15s
+    # tft_upload_http_retries: 5
+    # tft_upload_watchdog_timeout: 60s
+
     on_setup:
       then:
         - script.execute: nx_push_config
@@ -281,3 +304,32 @@ interval:
     then:
       - script.execute: nx_push_config
       - script.execute: nx_sync_rtc
+
+# ==============================================================================
+# Mise à jour du .tft par WiFi (optionnel)
+# ==============================================================================
+# À décommenter EN MÊME TEMPS que le bloc `tft_url:` du composant ci-dessus.
+# Sans `tft_url`, `upload_tft()` n'est pas compilé et ce bouton casserait la
+# compilation.
+#
+# Le transfert dure plusieurs minutes et bloque la boucle principale : la
+# régulation est suspendue pendant ce temps. À lancer filtration à l'arrêt,
+# hors des plages de dosage.
+#
+# En cas d'échec en cours de transfert, l'écran peut rester en mode réception ;
+# il se récupère en rechargeant le .tft par carte SD — gardez cette porte de
+# sortie ouverte.
+# ==============================================================================
+# button:
+#   - platform: template
+#     name: "Mettre à jour l'écran Nextion"
+#     icon: mdi:file-upload
+#     entity_category: config
+#     on_press:
+#       - logger.log: "Nextion: debut du transfert TFT, regulation suspendue"
+#       - lambda: |-
+#           // baud_rate = 0 -> conserve le débit courant
+#           // exit_reparse = true -> sort du mode reparse avant l'envoi
+#           if (!id(nx)->upload_tft(0, true)) {
+#             ESP_LOGE("nextion", "Transfert TFT echoue");
+#           }

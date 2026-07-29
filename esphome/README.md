@@ -58,7 +58,7 @@ packages/
   safety.yaml              surpression, temps de marche max, acquittement
   auxiliary.yaml           relais libres R0 / R1
   status_leds.yaml         LEDs PCF8574 + buzzer
-  nextion.yaml             écran Nextion (composant officiel ESPHome)
+  nextion.yaml             écran Nextion (composant officiel + MAJ .tft WiFi)
   nextion-uart-brut.yaml   variante : protocole d'origine, HMI non modifié
 ```
 
@@ -284,12 +284,61 @@ insensible aux remaniements ensuite.
 
 #### Ce que ça apporte
 
-- **Mise à jour du `.tft` par WiFi** (`tft_url` + action `nextion.upload_tft`),
-  au lieu de la carte SD.
+- **Mise à jour du `.tft` par WiFi**, au lieu de la carte SD — voir ci-dessous.
 - Les plateformes `sensor`/`binary_sensor`/`switch`/`text_sensor` `nextion`,
   qui lient une entité à un composant de l'écran sans écrire de lambda.
 - Les déclencheurs `on_sleep`, `on_wake`, `on_buffer_overflow`, et la gestion
   de la veille (`touch_sleep_timeout`, `auto_wake_on_touch`).
+
+#### Mettre à jour le `.tft` par WiFi
+
+**1. Héberger le fichier.** Déposez le `.tft` dans le dossier `config/www/` de
+Home Assistant : il devient accessible sur
+`http://<ha>:8123/local/<fichier>.tft`. Le fichier du dépôt est
+`Nextion/tft/PoolMaster_Nextion_v6.tft` (~2,4 Mo). Préférez une adresse IP à un
+nom `.local` — la résolution mDNS depuis l'ESP32 est moins fiable que depuis un
+PC.
+
+**2. Activer l'option.** Dans `packages/nextion.yaml`, décommentez le bloc
+`tft_url:` **et** le bloc `button:` en fin de fichier. Les deux vont ensemble :
+il n'existe pas d'action YAML `upload_tft`, c'est un appel C++ compilé
+seulement si `tft_url` est défini (`#ifdef USE_NEXTION_TFT_UPLOAD`). Un bouton
+sans `tft_url` ne compilerait pas.
+
+```yaml
+    tft_url: "http://192.168.1.10:8123/local/poolmaster.tft"
+    tft_upload_http_timeout: 15s
+    tft_upload_http_retries: 5
+    tft_upload_watchdog_timeout: 60s
+```
+
+**3. Recompiler, flasher, puis appuyer** sur le bouton « Mettre à jour l'écran
+Nextion » depuis Home Assistant ou l'interface web.
+
+Trois choses à savoir avant de l'activer :
+
+- **Le transfert bloque la boucle principale** plusieurs minutes : la
+  régulation est suspendue pendant ce temps. À lancer filtration à l'arrêt,
+  hors des plages de dosage.
+- **Le firmware grossit.** ESPHome réintègre le client HTTP de l'ESP-IDF
+  (`esp_http_client`), exclu du build par défaut pour gagner du temps de
+  compilation. Compilation plus longue également.
+- **En HTTPS, le certificat n'est pas vérifié** : ESPHome active
+  `CONFIG_ESP_TLS_INSECURE` et `CONFIG_ESP_TLS_SKIP_SERVER_CERT_VERIFY` pour
+  éviter d'embarquer une autorité de certification. Sans conséquence sur un
+  réseau local, mais ne pointez pas cette URL vers Internet. Du simple HTTP sur
+  le LAN reste le plus sain.
+
+Si le transfert échoue en cours de route, l'écran peut rester en mode
+réception. Il se récupère en rechargeant le `.tft` **par carte SD** : gardez
+cette porte de sortie ouverte, surtout pour le premier essai.
+
+> Pourquoi ces options sont dans `nextion.yaml` et pas dans un paquet séparé
+> qu'on ajouterait au besoin : la fusion ESPHome **concatène** les listes sans
+> les fusionner par `id:`. Un second paquet déclarant `display: - id: nx` ne
+> compléterait donc pas le composant existant, il créerait une deuxième entrée
+> incomplète et la validation échouerait sur *« 'display' requires a 'platform'
+> key »*.
 
 #### Si vous ne voulez pas toucher au HMI
 
