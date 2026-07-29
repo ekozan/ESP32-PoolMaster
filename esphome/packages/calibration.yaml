@@ -30,6 +30,9 @@ globals:
   - id: ph_wiz_step
     type: int
     initial_value: '0'
+  - id: orp_wiz_step
+    type: int
+    initial_value: '0'
 
   # --- pH ---
   - id: cal_ph_v            # tensions relevées (V)
@@ -129,6 +132,62 @@ number:
     restore_value: true
     mode: box
     entity_category: config
+  # --- Assistant ORP -------------------------------------------------------
+  # L'ORP ne se calibre PAS comme le pH. La pente (C0 = 431 mV/V) vient du gain
+  # de l'amplificateur de la carte, pas de la sonde : c'est une constante
+  # matérielle. Une sonde ORP se recale donc normalement en DÉCALAGE seul, sur
+  # une unique solution étalon — d'où « nombre de solutions » à 1 par défaut.
+  # Passez à 2 seulement si vous possédez réellement deux solutions ORP
+  # distinctes ; forcer une régression sur deux points trop proches dégraderait
+  # la pente au lieu de l'améliorer.
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 73
+    name: "Étalonnage ORP — nombre de solutions"
+    id: num_cal_orp_npts
+    icon: mdi:numeric
+    min_value: 1
+    max_value: 2
+    step: 1
+    initial_value: 1
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 74
+    name: "Étalonnage ORP — solution 1"
+    id: num_cal_orp_sol1
+    unit_of_measurement: "mV"
+    icon: mdi:flask
+    min_value: 0
+    max_value: 1000
+    step: 1
+    initial_value: 470
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 75
+    name: "Étalonnage ORP — solution 2"
+    id: num_cal_orp_sol2
+    unit_of_measurement: "mV"
+    icon: mdi:flask
+    min_value: 0
+    max_value: 1000
+    step: 1
+    initial_value: 240
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+
   - platform: template
     web_server:
       sorting_group_id: grp_calibration
@@ -213,6 +272,60 @@ text_sensor:
                "Terminé sur %d points. C0=%.5f  C1=%.4f — pente à %d %% du "
                "nominal (%s). Relancez pour recommencer.",
                id(cal_ph_n), c0, id(num_ph_c1).state, pct, verdict);
+      return {b};
+
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 71
+    name: "Étalonnage ORP"
+    id: txt_orp_wizard
+    icon: mdi:clipboard-text
+    update_interval: 2s
+    lambda: |-
+      char b[220];
+      const int st = id(orp_wiz_step);
+      const int np = (int) id(num_cal_orp_npts).state;
+      const bool hasv = id(orp_volts).has_state();
+      const float v = hasv ? id(orp_volts).state : 0.0f;
+
+      if (st == 0) {
+        snprintf(b, sizeof(b),
+                 "Prêt — étalonnage %d point%s. Appuyez sur « Point suivant » "
+                 "pour commencer.", np, np > 1 ? "s" : "");
+        return {b};
+      }
+      if (st >= 1 && st <= 2) {
+        const float ref = st == 1 ? id(num_cal_orp_sol1).state
+                                  : id(num_cal_orp_sol2).state;
+        if (hasv)
+          snprintf(b, sizeof(b),
+                   "%d/%d — Rincez la sonde, plongez-la dans la solution "
+                   "%.0f mV, attendez la stabilisation (%.4f V), puis appuyez "
+                   "sur « Point suivant ».", st, np, ref, v);
+        else
+          snprintf(b, sizeof(b), "%d/%d — Solution %.0f mV. En attente de mesure…",
+                   st, np, ref);
+        return {b};
+      }
+      // Terminé. En 1 point on n'a corrigé que le décalage : c'est lui qu'on
+      // commente. Un décalage énorme signale une sonde encrassée ou en fin de
+      // vie plutôt qu'un simple recalage.
+      const float c1 = id(num_orp_c1).state;
+      if (id(cal_orp_n) <= 1) {
+        const char *verdict = fabsf(c1) < 60.0f  ? "normal"
+                            : fabsf(c1) < 150.0f ? "décalage important — nettoyez la sonde"
+                                                 : "décalage anormal — sonde probablement HS";
+        snprintf(b, sizeof(b),
+                 "Terminé sur 1 point (décalage seul). C1=%.1f mV — %s. "
+                 "Relancez pour recommencer.", c1, verdict);
+      } else {
+        const int pct = (int) lroundf(100.0f * id(num_orp_c0).state / 431.03f);
+        snprintf(b, sizeof(b),
+                 "Terminé sur 2 points. C0=%.2f  C1=%.1f — pente à %d %% du "
+                 "gain matériel. Relancez pour recommencer.",
+                 id(num_orp_c0).state, c1, pct);
+      }
       return {b};
 
 sensor:
@@ -316,7 +429,28 @@ button:
           id(cal_ph_n) = 0;
           ESP_LOGI("calib", "pH: points de calibration effaces");
 
-  # --- ORP ---
+  # --- Assistant ORP ---
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 72
+    name: "Étalonnage ORP — point suivant"
+    icon: mdi:play-circle
+    on_press:
+      - script.execute: orp_wizard_next
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 76
+    name: "Étalonnage ORP — annuler"
+    icon: mdi:close-circle
+    on_press:
+      - lambda: |-
+          id(orp_wiz_step) = 0;
+          id(cal_orp_n) = 0;
+          ESP_LOGI("calib", "Assistant ORP annule");
+
+  # --- ORP, mode manuel point par point ---
   - platform: template
     web_server:
       sorting_group_id: grp_calibration
@@ -440,6 +574,44 @@ script:
           } else {
             id(cal_compute_ph)->execute();   // même régression que le mode manuel
             id(ph_wiz_step) = 9;
+          }
+
+  # ----------------------------------------------------------------------------
+  # Assistant ORP. Même principe que le pH, mais le nombre de points est
+  # configurable et vaut 1 par défaut : voir la note sur la pente matérielle
+  # dans la section `number:`.
+  # ----------------------------------------------------------------------------
+  - id: orp_wizard_next
+    then:
+      - lambda: |-
+          const int st = id(orp_wiz_step);
+          const int np = (int) id(num_cal_orp_npts).state;
+
+          if (st == 0 || st >= 9) {
+            id(cal_orp_n) = 0;
+            id(orp_wiz_step) = 1;
+            ESP_LOGI("calib", "Assistant ORP: demarrage, %d point(s)", np);
+            return;
+          }
+          if (!id(orp_volts).has_state()) {
+            ESP_LOGW("calib", "Assistant ORP: pas encore de mesure, patientez");
+            return;
+          }
+
+          const float ref = st == 1 ? id(num_cal_orp_sol1).state
+                                    : id(num_cal_orp_sol2).state;
+          const int i = id(cal_orp_n);
+          id(cal_orp_v)[i]   = id(orp_volts).state;
+          id(cal_orp_ref)[i] = ref;
+          id(cal_orp_n) = i + 1;
+          ESP_LOGI("calib", "Assistant ORP: point %d releve, %.4f V -> %.0f mV",
+                   st, id(cal_orp_v)[i], ref);
+
+          if (st < np) {
+            id(orp_wiz_step) = st + 1;
+          } else {
+            id(cal_compute_orp)->execute();
+            id(orp_wiz_step) = 9;
           }
 
   # ----------------------------------------------------------------------------

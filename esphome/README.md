@@ -351,6 +351,31 @@ deux façons de s'en servir. L'état de l'assistant n'est volontairement **pas**
 persistant : un étalonnage interrompu par une coupure repart de zéro plutôt que
 de reprendre au milieu avec une sonde dont on ne sait plus où elle est.
 
+#### Assistant ORP guidé
+
+Même principe, **mais pas les mêmes réglages** — et c'est volontaire.
+
+Une sonde ORP ne se calibre pas comme une sonde pH. La pente
+(`C0 = 431 mV/V`) vient du **gain de l'amplificateur de la carte**, pas de la
+sonde : c'est une constante matérielle. Une sonde ORP se recale donc en
+**décalage seul**, sur une unique solution étalon — ce que la plupart des
+utilisateurs possèdent, d'ailleurs.
+
+D'où `Étalonnage ORP — nombre de solutions`, réglé à **1 par défaut** :
+
+| Réglage | Effet |
+|---|---|
+| 1 solution *(défaut)* | corrige le décalage `C1`, conserve la pente matérielle |
+| 2 solutions | régression complète — à réserver au cas où vous possédez vraiment deux solutions ORP distinctes |
+
+Forcer une régression sur deux points trop rapprochés dégraderait la pente au
+lieu de l'améliorer : ne passez à 2 que si vos deux solutions sont réellement
+éloignées (par exemple 240 mV et 470 mV, les valeurs par défaut).
+
+Le verdict de fin est adapté au mode : en 1 point il commente le **décalage**
+obtenu (*normal*, *décalage important — nettoyez la sonde*, *décalage anormal —
+sonde probablement HS*) plutôt qu'une pente qui n'a pas bougé.
+
 #### Mode manuel, point par point
 
 Utile pour l'ORP et la pression, ou pour un pH à un seul point. Les

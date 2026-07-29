@@ -251,6 +251,26 @@ views:
           - entity: number.poolmaster_etalonnage_ph_tampon_3
             name: Tampon 3
 
+      - type: markdown
+        title: Étalonnage ORP guidé
+        content: >
+          ## {{ states('sensor.poolmaster_etalonnage_orp') }}
+
+      - type: entities
+        title: Étalonnage ORP — commandes
+        entities:
+          - entity: button.poolmaster_etalonnage_orp_point_suivant
+            name: ▶ Démarrer / point suivant
+          - entity: button.poolmaster_etalonnage_orp_annuler
+            name: ✕ Annuler
+          - type: divider
+          - entity: number.poolmaster_etalonnage_orp_nombre_de_solutions
+            name: Nombre de solutions
+          - entity: number.poolmaster_etalonnage_orp_solution_1
+            name: Solution 1
+          - entity: number.poolmaster_etalonnage_orp_solution_2
+            name: Solution 2
+
       - type: entities
         title: Calibration pH — mode manuel
         entities:
