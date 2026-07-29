@@ -31,8 +31,25 @@ output:
     pin: { pcf8574: pcf_leds, number: 7, mode: OUTPUT, inverted: true }
 
 switch:
+  # ----------------------------------------------------------------------------
+  # Buzzer sur GPIO2. C'est une broche de « strapping » de l'ESP32 (avec 0, 5,
+  # 12 et 15) : son état est lu au démarrage pour choisir le mode de boot.
+  # Le brochage vient de la carte PoolMaster (include/Config.h du firmware
+  # d'origine, qui utilisait déjà cette broche) — ce n'est pas un choix du
+  # portage, et l'avertissement ESPHome est donc attendu ici. On le fait taire
+  # explicitement pour qu'il ne masque pas de vrais avertissements.
+  #
+  # Deux conséquences à connaître :
+  #  - GPIO2 doit être BAS (ou flottant) pour entrer en mode téléversement USB.
+  #    Si un jour l'ESP32 refuse de passer en mode flash par USB, débrancher le
+  #    buzzer est la première chose à essayer.
+  #  - Entre le reset et l'initialisation d'ESPHome, l'état de la broche n'est
+  #    pas maîtrisé : un bref bip au démarrage est normal.
+  # ----------------------------------------------------------------------------
   - platform: gpio
-    pin: ${pin_buzzer}
+    pin:
+      number: ${pin_buzzer}
+      ignore_strapping_warning: true
     id: buzzer_out
     internal: true
     restore_mode: ALWAYS_OFF

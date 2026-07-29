@@ -435,6 +435,26 @@ Deux points en découlent :
 Les réglages persistants (consignes, calibrations, compteurs) vivent dans la
 partition `nvs` de 448 Ko et ne consomment rien sur le budget applicatif.
 
+## Le buzzer est sur une broche de strapping (GPIO2)
+
+GPIO2 fait partie des broches de *strapping* de l'ESP32 (avec 0, 5, 12 et 15) :
+leur état est lu au démarrage pour choisir le mode de boot. Le brochage vient
+de la carte PoolMaster — le firmware d'origine utilisait déjà GPIO2 pour le
+buzzer — ce n'est donc pas un choix du portage.
+
+`packages/status_leds.yaml` pose `ignore_strapping_warning: true` sur cette
+broche, avec la justification en commentaire : l'avertissement est attendu, et
+le laisser défiler à chaque compilation finirait par masquer de vrais
+avertissements.
+
+Deux conséquences pratiques :
+
+- **GPIO2 doit être bas (ou flottant) pour entrer en mode téléversement USB.**
+  Si un jour l'ESP32 refuse de passer en mode flash par USB, débrancher le
+  buzzer est la première chose à essayer.
+- Entre le reset et l'initialisation d'ESPHome, l'état de la broche n'est pas
+  maîtrisé : **un bref bip au démarrage est normal**.
+
 ## Compilation : « Killed signal terminated program cc1plus »
 
 Ce message n'est **pas** une erreur de code : le compilateur a été tué par le
