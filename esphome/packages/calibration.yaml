@@ -22,6 +22,15 @@
 # peut donc étaler une calibration sur plusieurs jours.
 # ==============================================================================
 globals:
+  # --- Assistant d'étalonnage pH ---
+  # 0 = au repos, 1..3 = tampon attendu, 9 = terminé.
+  # Volontairement NON persistant : un étalonnage interrompu par une coupure
+  # doit repartir de zéro plutôt que de reprendre au milieu avec une sonde
+  # qu'on ne sait plus où se trouve.
+  - id: ph_wiz_step
+    type: int
+    initial_value: '0'
+
   # --- pH ---
   - id: cal_ph_v            # tensions relevées (V)
     type: float[8]
@@ -57,6 +66,54 @@ globals:
     initial_value: '0'
 
 number:
+  # --- Les trois tampons de l'assistant, tous paramétrables ---
+  # Valeurs par défaut : les tampons du commerce les plus courants.
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 3
+    name: "Étalonnage pH — tampon 1"
+    id: num_cal_ph_buf1
+    icon: mdi:flask
+    min_value: 0
+    max_value: 14
+    step: 0.01
+    initial_value: 4.01
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 4
+    name: "Étalonnage pH — tampon 2"
+    id: num_cal_ph_buf2
+    icon: mdi:flask
+    min_value: 0
+    max_value: 14
+    step: 0.01
+    initial_value: 7.01
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 5
+    name: "Étalonnage pH — tampon 3"
+    id: num_cal_ph_buf3
+    icon: mdi:flask
+    min_value: 0
+    max_value: 14
+    step: 0.01
+    initial_value: 9.18
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+
   - platform: template
     web_server:
       sorting_group_id: grp_calibration
@@ -105,6 +162,59 @@ number:
     mode: box
     entity_category: config
 
+text_sensor:
+  # ----------------------------------------------------------------------------
+  # Statut de l'assistant : c'est LUI qu'on regarde pendant l'étalonnage. Il dit
+  # quoi faire à chaque étape et affiche la tension mesurée en direct, pour voir
+  # la sonde se stabiliser avant d'appuyer.
+  # ----------------------------------------------------------------------------
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 1
+    name: "Étalonnage pH"
+    id: txt_ph_wizard
+    icon: mdi:clipboard-text
+    update_interval: 2s
+    lambda: |-
+      char b[220];
+      const int st = id(ph_wiz_step);
+      const bool hasv = id(ph_volts).has_state();
+      const float v = hasv ? id(ph_volts).state : 0.0f;
+
+      if (st == 0) {
+        return {"Prêt. Appuyez sur « Démarrer / Point suivant » pour lancer "
+                "l'étalonnage 3 points."};
+      }
+      if (st >= 1 && st <= 3) {
+        float ref = st == 1 ? id(num_cal_ph_buf1).state
+                  : st == 2 ? id(num_cal_ph_buf2).state
+                            : id(num_cal_ph_buf3).state;
+        if (hasv)
+          snprintf(b, sizeof(b),
+                   "%d/3 — Rincez la sonde, plongez-la dans le tampon pH %.2f, "
+                   "attendez que la mesure se stabilise (%.4f V), puis appuyez "
+                   "sur « Point suivant ».", st, ref, v);
+        else
+          snprintf(b, sizeof(b), "%d/3 — Tampon pH %.2f. En attente de mesure…",
+                   st, ref);
+        return {b};
+      }
+      // Terminé : on rend compte du résultat et de l'état de la sonde. La pente
+      // nominale est le C0 d'usine ; s'en écarter beaucoup trahit une sonde
+      // fatiguée ou un tampon périmé.
+      const float c0 = id(num_ph_c0).state;
+      const float nominal = -2.50133333f;
+      const int pct = (int) lroundf(100.0f * c0 / nominal);
+      const char *verdict = (pct >= 85 && pct <= 115) ? "sonde OK"
+                          : (pct >= 70 && pct <= 130) ? "sonde fatiguée"
+                                                      : "résultat douteux — à refaire";
+      snprintf(b, sizeof(b),
+               "Terminé sur %d points. C0=%.5f  C1=%.4f — pente à %d %% du "
+               "nominal (%s). Relancez pour recommencer.",
+               id(cal_ph_n), c0, id(num_ph_c1).state, pct, verdict);
+      return {b};
+
 sensor:
   - platform: template
     web_server:
@@ -141,7 +251,30 @@ sensor:
     lambda: 'return id(cal_psi_n);'
 
 button:
-  # --- pH ---
+  # --- Assistant pH : deux boutons suffisent ---
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 2
+    name: "Étalonnage pH — point suivant"
+    icon: mdi:play-circle
+    on_press:
+      - script.execute: ph_wizard_next
+  - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 6
+    name: "Étalonnage pH — annuler"
+    icon: mdi:close-circle
+    on_press:
+      - lambda: |-
+          // N'efface que l'assistant : la calibration en vigueur (C0/C1) est
+          // conservée tant qu'un nouvel étalonnage n'a pas abouti.
+          id(ph_wiz_step) = 0;
+          id(cal_ph_n) = 0;
+          ESP_LOGI("calib", "Assistant pH annule");
+
+  # --- pH, mode manuel point par point ---
   - platform: template
     web_server:
       sorting_group_id: grp_calibration
@@ -268,6 +401,47 @@ button:
           ESP_LOGI("calib", "PSI: points de calibration effaces");
 
 script:
+  # ----------------------------------------------------------------------------
+  # Assistant pH : un seul bouton fait avancer la séquence.
+  #   au repos  -> efface les points et passe au tampon 1
+  #   tampon N  -> enregistre (tension, pH du tampon N) et passe au suivant
+  #   tampon 3  -> enregistre, lance la régression, affiche le résultat
+  # Il alimente les mêmes tableaux que le mode manuel et appelle le même
+  # cal_compute_ph : un seul moteur de calibration, deux façons de le piloter.
+  # ----------------------------------------------------------------------------
+  - id: ph_wizard_next
+    then:
+      - lambda: |-
+          const int st = id(ph_wiz_step);
+
+          if (st == 0 || st >= 9) {          // (re)démarrage
+            id(cal_ph_n) = 0;
+            id(ph_wiz_step) = 1;
+            ESP_LOGI("calib", "Assistant pH: demarrage, tampon 1 attendu");
+            return;
+          }
+          if (!id(ph_volts).has_state()) {
+            ESP_LOGW("calib", "Assistant pH: pas encore de mesure, patientez");
+            return;
+          }
+
+          const float ref = st == 1 ? id(num_cal_ph_buf1).state
+                          : st == 2 ? id(num_cal_ph_buf2).state
+                                    : id(num_cal_ph_buf3).state;
+          const int i = id(cal_ph_n);
+          id(cal_ph_v)[i]   = id(ph_volts).state;
+          id(cal_ph_ref)[i] = ref;
+          id(cal_ph_n) = i + 1;
+          ESP_LOGI("calib", "Assistant pH: point %d releve, %.4f V -> pH %.2f",
+                   st, id(cal_ph_v)[i], ref);
+
+          if (st < 3) {
+            id(ph_wiz_step) = st + 1;
+          } else {
+            id(cal_compute_ph)->execute();   // même régression que le mode manuel
+            id(ph_wiz_step) = 9;
+          }
+
   # ----------------------------------------------------------------------------
   # Régression linéaire par moindres carrés : ref = C0 * tension + C1
   #

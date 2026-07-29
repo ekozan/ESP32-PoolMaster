@@ -227,14 +227,41 @@ views:
           - sensor.poolmaster_filtration_duree
           - button.poolmaster_recalculer_la_plage_de_filtration
 
+      # L'assistant tient en deux lignes : on lit la consigne, on appuie.
+      # Le texte dit quel tampon utiliser, affiche la tension en direct pour
+      # juger de la stabilisation, puis annonce le résultat et l'état de la
+      # sonde.
+      - type: markdown
+        title: Étalonnage pH guidé
+        content: >
+          ## {{ states('sensor.poolmaster_etalonnage_ph') }}
+
       - type: entities
-        title: Calibration pH
+        title: Étalonnage pH — commandes
+        entities:
+          - entity: button.poolmaster_etalonnage_ph_point_suivant
+            name: ▶ Démarrer / point suivant
+          - entity: button.poolmaster_etalonnage_ph_annuler
+            name: ✕ Annuler
+          - type: divider
+          - entity: number.poolmaster_etalonnage_ph_tampon_1
+            name: Tampon 1
+          - entity: number.poolmaster_etalonnage_ph_tampon_2
+            name: Tampon 2
+          - entity: number.poolmaster_etalonnage_ph_tampon_3
+            name: Tampon 3
+
+      - type: entities
+        title: Calibration pH — mode manuel
         entities:
           - number.poolmaster_ph_reference_solution_etalon
           - button.poolmaster_ph_enregistrer_le_point
           - button.poolmaster_ph_calculer_la_calibration
           - button.poolmaster_ph_effacer_les_points
           - sensor.poolmaster_points_de_calibration_ph
+          - type: divider
+          - number.poolmaster_ph_calibration_c0
+          - number.poolmaster_ph_calibration_c1
 
       - type: entities
         title: Sécurité

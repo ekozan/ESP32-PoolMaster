@@ -320,8 +320,42 @@ ajoutez un bouton au HMI.
 
 ### Calibration multi-points embarquée
 
-Les coefficients `C0`/`C1` (`valeur = tension × C0 + C1`) peuvent être calculés
-à bord au lieu d'être saisis à la main. Pour chaque sonde (pH, ORP, pression) :
+#### Assistant pH guidé (le plus simple)
+
+Pour le pH, un assistant remplace la saisie manuelle : **un texte de statut dit
+quoi faire, un seul bouton fait avancer**.
+
+| Ce que le statut affiche | Ce que vous faites |
+|---|---|
+| « Prêt. Appuyez sur… » | appuyer sur **Point suivant** |
+| « 1/3 — Rincez la sonde, plongez-la dans le tampon pH 4.01, attendez la stabilisation (2.0431 V) » | tremper, attendre, appuyer |
+| « 2/3 — … tampon pH 7.01 … » | idem |
+| « 3/3 — … tampon pH 9.18 … » | idem — le calcul se lance seul |
+| « Terminé sur 3 points. C0=… C1=… — pente à 97 % du nominal (sonde OK) » | rien, c'est fini |
+
+La **tension mesurée est affichée en direct** dans le statut : on voit la sonde
+se stabiliser et on sait quand appuyer, au lieu de deviner.
+
+Les trois tampons sont **paramétrables** (`Étalonnage pH — tampon 1/2/3`), avec
+4.01 / 7.01 / 9.18 par défaut. Un bouton **Annuler** abandonne la séquence sans
+toucher à la calibration en vigueur — celle-ci n'est remplacée qu'une fois les
+trois points relevés.
+
+À la fin, le statut compare la pente obtenue à la valeur nominale et rend un
+verdict : *sonde OK*, *sonde fatiguée* ou *résultat douteux*. Un écart
+important trahit une sonde en fin de vie ou un tampon périmé.
+
+L'assistant n'est qu'un pilote : il remplit les mêmes tableaux et appelle la
+même régression que le mode manuel ci-dessous — un seul moteur de calibration,
+deux façons de s'en servir. L'état de l'assistant n'est volontairement **pas**
+persistant : un étalonnage interrompu par une coupure repart de zéro plutôt que
+de reprendre au milieu avec une sonde dont on ne sait plus où elle est.
+
+#### Mode manuel, point par point
+
+Utile pour l'ORP et la pression, ou pour un pH à un seul point. Les
+coefficients `C0`/`C1` (`valeur = tension × C0 + C1`) sont calculés à bord.
+Pour chaque sonde :
 
 1. plonger la sonde dans une solution étalon et attendre la stabilisation ;
 2. saisir la valeur de l'étalon dans « … référence » ;
