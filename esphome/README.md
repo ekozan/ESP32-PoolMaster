@@ -126,6 +126,40 @@ On importe tous les paquets **sauf `network.yaml`**, remplacé par la
 configuration WiFi/OTA/serveur web locale du fichier — c'est la seule partie
 qui dépend de votre réseau.
 
+#### « … does not exist in repository » : le cache est périmé
+
+ESPHome clone le dépôt une fois puis ne le re-vérifie que tous les `refresh:`
+(1 jour si vous ne précisez rien). Si un fichier de paquet a été **renommé ou
+ajouté** depuis
+votre dernier clone, la liste `files:` référence un nom que le clone en cache
+ne contient pas, et la validation échoue sur :
+
+```
+esphome/packages/<fichier>.yaml does not exist in repository.
+```
+
+Le fichier existe bien sur la branche : c'est le cache local qui est en retard.
+Trois façons de le forcer, de la plus simple à la plus radicale :
+
+1. **Raccourcir `refresh:`** le temps d'une compilation. `0s` ou `1s`
+   re-vérifient le dépôt à chaque exécution — c'est le réglage que porte
+   actuellement `exemple-import-distant.yaml`. Pratique tant que la branche
+   bouge, mais à remonter (`1d`) une fois la configuration stabilisée : chaque
+   build interroge GitHub, et sur une branche mouvante vous récupérez alors
+   tout changement poussé entre-temps sans l'avoir relu.
+2. **Changer `ref:`** — le dossier de cache est nommé d'après un hachage de
+   l'URL *et* de la référence, donc pointer un tag ou un SHA crée un cache neuf.
+   C'est l'occasion d'épingler pour de bon, comme conseillé plus haut.
+3. **Supprimer le cache.** Il est dans `<dossier de config>/.esphome/packages/`,
+   sauf **sur l'add-on Home Assistant où le dossier de données est `/data`** :
+   le cache est alors dans `/data/packages/`, accessible seulement par le
+   terminal de l'add-on, pas par l'éditeur de fichiers.
+
+C'est l'inconvénient de l'import distant : un renommage de fichier côté dépôt
+casse les consommateurs jusqu'au rafraîchissement. Épingler un tag l'évite —
+vous ne changez de version que quand vous le décidez, et le changement de `ref:`
+recrée le cache au passage.
+
 ### Réglages depuis Home Assistant
 
 Tout se règle depuis Home Assistant, sans YAML côté HA : les entités
