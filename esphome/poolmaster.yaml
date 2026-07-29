@@ -66,7 +66,11 @@ packages:
 
   # --- Interface locale ---
   status_leds:     !include packages/status_leds.yaml     # LEDs PCF8574 + buzzer
-  nextion:         !include packages/nextion.yaml         # écran tactile
+  # Écran tactile. La variante « UART brut » est le défaut : elle fonctionne
+  # avec le fichier HMI d'origine, sans modification. Pour passer au composant
+  # officiel ESPHome (mise à jour du .tft par WiFi, entités liées), remplacez
+  # par packages/nextion.yaml — après avoir modifié le HMI, voir le README.
+  nextion:         !include packages/nextion-uart-brut.yaml
 
 # --- MQTT optionnel -----------------------------------------------------------
 # L'intégration Home Assistant passe par l'API native ESPHome (recommandé).

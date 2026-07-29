@@ -62,7 +62,7 @@ packages:
   safety:          !include packages/safety.yaml
   auxiliary:       !include packages/auxiliary.yaml
   status_leds:     !include packages/status_leds.yaml
-  nextion:         !include packages/nextion.yaml
+  nextion:         !include packages/nextion-uart-brut.yaml
   # network:       volontairement absent — remplacé par les blocs ci-dessous
 
 # --- Variante : import distant depuis GitHub --------------------------------

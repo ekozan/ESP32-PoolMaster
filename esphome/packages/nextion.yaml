@@ -1,13 +1,19 @@
 # ==============================================================================
 # Écran Nextion — composant officiel ESPHome
 # ==============================================================================
-# ⚠ Ce paquet demande des MODIFICATIONS DU FICHIER HMI dans Nextion Editor.
-# Tant qu'elles ne sont pas faites, l'affichage fonctionnera mais les boutons
-# de l'écran resteront sans effet. La marche à suivre complète est dans
-# esphome/README.md, section « Écran Nextion ».
+# ⚠ Ce paquet n'est PAS celui utilisé par défaut. Le défaut est
+# packages/nextion-uart-brut.yaml, qui fonctionne avec le HMI d'origine.
 #
-# Si vous ne voulez pas toucher au HMI, utilisez plutôt la variante
-# packages/nextion-uart-brut.yaml, qui reproduit le protocole d'origine.
+# Celui-ci exige des MODIFICATIONS DU FICHIER HMI dans Nextion Editor. Sans
+# elles, l'écran reste FIGÉ (problème de débit, voir plus bas) ou, si le débit
+# est déjà bon, affiche correctement mais les boutons restent sans effet.
+# La marche à suivre complète est dans esphome/README.md, section
+# « Écran Nextion ».
+#
+# Ce qu'il apporte en échange : mise à jour du .tft par WiFi, plateformes
+# `nextion` pour lier une entité à un composant de l'écran, déclencheurs de
+# veille. Pour l'activer, remplacez dans le bloc `packages:` :
+#     nextion:  !include packages/nextion.yaml
 #
 # ------------------------------------------------------------------------------
 # Sens ESP32 -> écran : AUCUNE modification du HMI nécessaire.

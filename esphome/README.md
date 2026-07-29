@@ -58,8 +58,8 @@ packages/
   safety.yaml              surpression, temps de marche max, acquittement
   auxiliary.yaml           relais libres R0 / R1
   status_leds.yaml         LEDs PCF8574 + buzzer
-  nextion.yaml             écran Nextion (composant officiel + MAJ .tft WiFi)
-  nextion-uart-brut.yaml   variante : protocole d'origine, HMI non modifié
+  nextion-uart-brut.yaml   écran Nextion — protocole d'origine (PAR DÉFAUT)
+  nextion.yaml             variante : composant officiel + MAJ .tft WiFi
 ```
 
 Les paquets sont fusionnés par ESPHome : les identifiants (`id:`) sont visibles
@@ -209,9 +209,29 @@ enregistrés par sonde.
 
 ### Écran Nextion
 
-Le paquet `packages/nextion.yaml` utilise le **composant `nextion` officiel**
-d'ESPHome, sur l'UART TX GPIO17 / RX GPIO16 (les broches de `Serial2` du
-firmware d'origine — aucun recâblage).
+Deux paquets au choix, sur l'UART TX GPIO17 / RX GPIO16 (les broches de
+`Serial2` du firmware d'origine — aucun recâblage dans les deux cas) :
+
+| Paquet | HMI à modifier | État |
+|---|---|---|
+| `nextion-uart-brut.yaml` | **non** | **paquet par défaut** |
+| `nextion.yaml` | oui, 3 modifications | à activer quand le HMI est prêt |
+
+**Pourquoi l'UART brut est le défaut.** Le firmware d'origine élevait le débit
+avec `baud=115200`, la commande *volatile* : l'écran repart à 9600 à chaque
+mise sous tension, et le firmware renégociait à chaque démarrage. Le paquet
+UART brut rejoue cette séquence, le composant officiel ne sait pas le faire —
+d'où un écran figé tant que le HMI n'a pas été passé en `bauds=115200`
+persistant.
+
+Basculer sur le composant officiel une fois le HMI modifié se fait en une
+ligne du bloc `packages:` :
+
+```yaml
+  nextion:  !include packages/nextion.yaml
+```
+
+Ce qui suit décrit ce composant officiel et les modifications qu'il réclame.
 
 #### Ce qui marche sans rien changer
 

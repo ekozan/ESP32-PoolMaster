@@ -1,44 +1,21 @@
 # ==============================================================================
-# Écran Nextion — VARIANTE : protocole d'origine sur UART brut
+# Écran Nextion — protocole d'origine sur UART brut (paquet PAR DÉFAUT)
 # ==============================================================================
-# ⚠ Ce paquet est l'ALTERNATIVE. Le paquet par défaut est `nextion.yaml`, qui
-# utilise le composant `nextion` officiel d'ESPHome et demande quelques
-# modifications du fichier HMI (voir README, section « Écran Nextion »).
+# Fonctionne avec le fichier HMI d'origine, SANS aucune modification : on
+# reproduit exactement le protocole de l'ancien firmware sur un UART brut,
+# y compris la renégociation du débit au démarrage.
 #
-# Utilisez CE fichier-ci si vous ne voulez PAS toucher au HMI : il fonctionne
-# avec l'écran tel quel, mais se prive du composant officiel — donc pas de mise
-# à jour du .tft par WiFi, pas de plateformes `nextion` pour les entités.
-# Remplacez alors `nextion: !include packages/nextion.yaml` par
-# `nextion: !include packages/nextion-uart-brut.yaml`.
-# ==============================================================================
-# Le fichier HMI (Nextion/PoolMaster_Nextion_V5.0/) est réutilisé **tel quel**,
-# sans passer par le composant `nextion` d'ESPHome : on reproduit exactement le
-# protocole de l'ancien firmware sur un UART brut.
+# C'est ce point-là qui justifie ce paquet comme défaut : le firmware d'origine
+# élevait le débit avec `baud=115200`, la commande VOLATILE — l'écran repart
+# donc à 9600 à chaque mise sous tension. Ce paquet rejoue la séquence
+# `rest` -> 9600 -> `baud=115200` -> 115200 à chaque démarrage, exactement
+# comme avant. Le composant officiel d'ESPHome, lui, ne sait pas le faire.
 #
-# Sens ESP32 -> écran (commandes Nextion standard) :
-#     objet.val=123<FF><FF><FF>        valeurs numériques
-#     objet.txt="texte"<FF><FF><FF>    textes
-#
-# Sens écran -> ESP32 (protocole custom EasyNextion) :
-#     '#' <len> <groupe> <p0> <p1> ...
-#   où <len> = 1 (groupe) + nombre de paramètres. Le HMI émet ces trames avec
-#   `printh 23 02 53 00` etc. Groupes utilisés ici :
-#     0x50 ENCT_PAGE   -> changement de page, p0 = identifiant de page
-#     0x53 ENCT_ACTION -> action utilisateur, p0 = action, p1 = valeur (option.)
-#   Un seul paramètre = bascule ; deux paramètres = consigne explicite.
-#
-# Identifiants de page émis par le HMI (0x50), repris du firmware d'origine —
-# ces valeurs sont figées dans le fichier HMI et ne peuvent pas être changées
-# ici : 1 Splash, 2 Home, 3 Menu, 4 Calibration, 5 Clavier, 6 Scan WiFi,
-# 7 Électrolyse, 8 Nouveau bac, 9 Info, 10 Date/heure, 11 Config WiFi,
-# 13 Graphique, 14 Home switch, 15 Langue, 16 Config MQTT, 17 Alertes,
-# 18 Config SMTP, 19 Config broches, 20 Aide, 21 Home800, 22 H800_OV1.
-#
-# Couverture de ce portage : pages Splash et Home (mesures, jauges, écarts
-# pH/ORP), bitmap d'état des 32 voyants/interrupteurs, horloge, et les actions
-# de commande listées plus bas. Les pages de configuration profondes (scan
-# WiFi, MQTT, SMTP, clavier, graphiques, calibration à l'écran) ne sont pas
-# portées — voir README.
+# L'alternative est packages/nextion.yaml (composant officiel ESPHome) : elle
+# apporte la mise à jour du .tft par WiFi et les entités liées aux composants
+# de l'écran, mais exige trois modifications du HMI dans Nextion Editor —
+# `bauds=115200` persistant, `sendme` au lieu de `printh 23 02 50 XX`, et des
+# trames `printh 91` nommées pour les boutons. Voir README.md.
 # ==============================================================================
 uart:
   - id: nextion_uart
@@ -325,6 +302,9 @@ interval:
                 case 19: set(id(relay_r1)); break;             // ENMC_SPARE
                 case 21: set(id(fill_pump)); break;            // ENMC_FILLING_PUMP
                 case 22: set(id(sw_electrolyse_mode)); break;  // ENMC_SWG_REGULATION
+                // Action 23 : ajout du portage, absente du firmware d'origine.
+                // Côté HMI : printh 23 02 53 17  (0x17 = 23, bascule)
+                case 23: set(id(sw_safe_stop)); break;         // arrêt d'urgence
                 case 20:                                       // ENMC_CLEAR_ALARMS
                   id(psi_error) = false;
                   id(ph_uptime_error) = false;
