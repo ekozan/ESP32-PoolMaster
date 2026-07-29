@@ -203,7 +203,12 @@ button:
           auto c = id(num_psi_clean).make_call();
           c.set_value(id(psi_val).state);
           c.perform();
-          ESP_LOGI("filtre", "Reference filtre propre: %.2f bar",
+          // Ce geste arme aussi la détection de désamorçage (safety.yaml) :
+          // tant qu'aucune référence n'a été relevée sur l'installation, son
+          // plancher n'a pas de sens et la protection reste inactive.
+          id(psi_clean_set) = true;
+          ESP_LOGI("filtre", "Reference filtre propre: %.2f bar "
+                             "(protection desamorcage armee)",
                    id(psi_val).state);
 
   - platform: template
@@ -235,7 +240,11 @@ script:
           }
 
           // --- Filtration automatique ---
-          if (id(psi_error)) return;
+          // Les deux erreurs de pression bloquent tout redémarrage, antigel
+          // compris : une pompe désamorcée ne fait circuler aucune eau, elle
+          // ne protège donc de rien du gel — elle ne ferait que se détruire à
+          // sec. Acquittez l'erreur après avoir réamorcé.
+          if (id(psi_error) || id(prime_error)) return;
           const bool in_window = h >= id(filt_start_h) && h < id(filt_stop_h);
           const bool want = (id(sw_auto_mode).state && in_window) || id(antifreeze_on);
           if (!id(sw_auto_mode).state && !id(antifreeze_on)) return;

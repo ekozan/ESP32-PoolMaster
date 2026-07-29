@@ -58,7 +58,7 @@ packages/
   electrolyse.yaml         électrolyseur au sel
   robot.yaml               robot de nettoyage
   levels.yaml              bacs, niveau piscine, pompe de remplissage
-  safety.yaml              surpression, temps de marche max, acquittement
+  safety.yaml              surpression, désamorçage, temps de marche max, acquittement
   auxiliary.yaml           relais libres R0 / R1
   status_leds.yaml         LEDs PCF8574 + buzzer
   web-ui-groups.yaml       sections de l'interface web embarquée
@@ -172,7 +172,7 @@ nécessaire pour changer une consigne.
 
 | Type | Nombre | Exemples |
 |---|---|---|
-| `number` | 34 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, référence filtre propre et seuil d'encrassement, volumes et débits des bacs, tampons et solutions étalons des assistants |
+| `number` | 36 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, référence filtre propre et seuil d'encrassement, volumes et débits des bacs, tampons et solutions étalons des assistants |
 | `switch` | 17 | arrêt d'urgence, mode auto, mode hiver, pompes, PID pH/ORP, mode électrolyseur, relais R0/R1, buzzer |
 | `button` | 12 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, enregistrer la référence filtre propre, redémarrer, et les 6 boutons des trois assistants d'étalonnage (avancer / annuler) |
 
@@ -180,7 +180,7 @@ Onze entités de plus existent mais sont **masquées** par défaut : les six
 coefficients `C0`/`C1` et le mode de calibration manuel point par point. Voir
 [Mode manuel et coefficients C0/C1](#mode-manuel-et-coefficients-c0c1--masqués-par-défaut).
 
-Les 34 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
+Les 36 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
 `restore_value: true` : la valeur est écrite dans la partition `nvs` et
 survit aux coupures de courant comme aux mises à jour OTA. Les valeurs
 `initial_value` du YAML ne servent qu'au tout premier démarrage.
@@ -195,7 +195,7 @@ que de laisser un défaut ancien bloquer la régulation après un reboot.
 
 ### Interfaces : web embarquée et Home Assistant
 
-**Interface web embarquée** (port 80). Les 93 entités s'affichaient en une
+**Interface web embarquée** (port 80). Les 96 entités s'affichaient en une
 liste plate, ce qui rendait la page illisible. Elles sont maintenant réparties
 en huit sections via les groupes de tri de `web_server` version 3 :
 
@@ -285,6 +285,50 @@ il vous dit d'aller manœuvrer la vanne.
 Tout est calculé sur `Pression en filtration`, jamais sur le capteur brut : le
 brut retombe à zéro entre les cycles, ce qui ferait clignoter l'alerte à chaque
 arrêt de pompe.
+
+### Détection de désamorçage
+
+L'autre côté de la même référence. Une pompe désamorcée brasse de l'air : elle
+ne monte pas en pression et **tourne à sec**, ce qui détruit sa garniture
+mécanique en quelques minutes.
+
+La règle : si la pression reste sous **la référence filtre propre moins
+100 mbar** pendant **30 secondes**, la filtration est coupée et l'erreur
+`Erreur désamorçage pompe` est levée. Les deux valeurs sont réglables
+(`Seuil de désamorçage`, `Délai de désamorçage`).
+
+| | Compté depuis la référence | Effet |
+|---|---|---|
+| `Seuil de désamorçage` | **vers le bas** (−100 mbar) | coupe la filtration |
+| `Seuil d'encrassement` | **vers le haut** (+200 mbar) | signale, ne coupe rien |
+
+Les deux encadrent la pression normale de l'installation.
+
+**Le compteur démarre avec la pompe** — le délai *est* la temporisation de
+démarrage. Une pompe amorcée monte en pression en quelques secondes, très en
+deçà de 30 s ; une pompe qui brasse de l'air n'y arrivera jamais. C'est aussi
+pourquoi ce contrôle n'attend pas les 2 minutes de la sécurité surpression :
+ce sont justement ces 2 minutes qu'il ne faut pas passer à tourner à vide.
+
+⚠ **La protection ne s'arme qu'une fois la référence relevée** sur votre
+installation, par le bouton `Filtre propre — enregistrer la référence`. Avec
+la valeur d'usine, le plancher serait arbitraire et couperait une pompe
+parfaitement saine. Tant que le geste n'a pas été fait, le journal le signale
+à chaque démarrage :
+
+```
+[W] Desamorcage: protection INACTIVE, reference filtre propre jamais enregistree
+```
+
+Une fois l'erreur levée, **plus aucun redémarrage automatique n'est possible**,
+antigel compris. C'est délibéré : une pompe désamorcée ne fait circuler aucune
+eau, elle ne protège donc de rien du gel — elle ne ferait que se détruire.
+Réamorcez, puis `Acquitter les erreurs` (bouton, ou action Clear de l'écran
+Nextion). L'erreur allume aussi la LED d'alarme du bandeau PCF8574.
+
+L'écran Nextion n'a pas d'indicateur dédié : les 32 bits de statut du protocole
+d'origine sont tous attribués et en ajouter un imposerait de modifier le HMI.
+L'acquittement depuis l'écran efface bien cette erreur comme les autres.
 
 ### Couleurs et style
 
@@ -1024,3 +1068,6 @@ vers un broker MQTT, avec les topics standard ESPHome.
 - Vérifiez le sens de vos contacts de niveau : la configuration suppose
   « contact ouvert = niveau bas » avec pull-up externe (broches 34/36/39 sans
   pull-up interne, conformément au PCB PoolMaster).
+- La protection contre le désamorçage reste **inactive** tant que la référence
+  « filtre propre » n'a pas été relevée sur votre installation. Faites-le dès
+  la mise en service, c'est un appui sur un bouton.

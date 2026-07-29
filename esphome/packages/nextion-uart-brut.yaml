@@ -310,6 +310,8 @@ interval:
                   id(ph_uptime_error) = false;
                   id(chl_uptime_error) = false;
                   id(fill_uptime_error) = false;
+                  id(prime_error) = false;
+                  id(prime_low_s) = 0;
                   ESP_LOGI("nextion", "erreurs acquittees depuis l'ecran");
                   break;
                 // Boutons de menu : valeur 2 = AUTO, sinon marche/arrêt direct.

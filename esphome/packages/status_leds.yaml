@@ -74,7 +74,8 @@ interval:
           const bool net_ok = wifi::global_wifi_component->is_connected();
           const bool tank_low = id(ph_tank_low).state || id(chl_tank_low).state;
           const bool any_err = id(psi_error) || id(ph_uptime_error) ||
-                               id(chl_uptime_error) || id(fill_uptime_error);
+                               id(chl_uptime_error) || id(fill_uptime_error) ||
+                               id(prime_error);
 
           auto set_led = [](output::BinaryOutput *o, bool on) {
             if (on) o->turn_on(); else o->turn_off();

@@ -77,6 +77,27 @@ globals:
     type: bool
     restore_value: false
     initial_value: 'false'
+  # Pompe de recirculation désamorcée : pression restée sous le plancher
+  # pendant tout le délai de garde. Non persistant comme les autres drapeaux.
+  - id: prime_error
+    type: bool
+    restore_value: false
+    initial_value: 'false'
+
+  # --- Surveillance du désamorçage (safety.yaml) ---
+  # Secondes consécutives passées sous le plancher de pression, remis à zéro
+  # dès que la pression remonte ou que la pompe s'arrête.
+  - id: prime_low_s
+    type: int
+    initial_value: '0'
+  # La protection ne s'arme qu'une fois la référence « filtre propre » relevée
+  # sur l'installation : avec la valeur d'usine, le plancher serait arbitraire
+  # et couperait une pompe parfaitement saine. Persistant, comme la référence
+  # elle-même (filtration.yaml).
+  - id: psi_clean_set
+    type: bool
+    restore_value: true
+    initial_value: 'false'
 
   # --- Plage de filtration calculée, en heures entières (filtration.yaml) ---
   - id: filt_start_h

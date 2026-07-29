@@ -142,6 +142,8 @@ views:
         state_color: true          # une alarme active passe en rouge
         entities:
           - binary_sensor.poolmaster_erreur_surpression
+          - entity: binary_sensor.poolmaster_erreur_desamorcage_pompe
+            name: Désamorçage — filtration coupée
           - binary_sensor.poolmaster_erreur_temps_de_marche_pompe_ph
           - binary_sensor.poolmaster_erreur_temps_de_marche_pompe_chlore
           - binary_sensor.poolmaster_antigel_actif
@@ -367,9 +369,20 @@ views:
           - entity: binary_sensor.poolmaster_contre_lavage_necessaire
             name: Contre-lavage nécessaire
 
+      # Le désamorçage se compte vers le BAS depuis la référence filtre propre,
+      # l'encrassement vers le haut : les deux encadrent la pression normale.
+      # La protection reste inactive tant que la référence n'a pas été relevée.
       - type: entities
         title: Sécurité
         entities:
           - number.poolmaster_seuil_surpression
+          - type: divider
+          - entity: number.poolmaster_seuil_de_desamorcage
+            name: Seuil de désamorçage (sous la référence)
+          - entity: number.poolmaster_delai_de_desamorcage
+            name: Délai avant coupure
+          - entity: binary_sensor.poolmaster_erreur_desamorcage_pompe
+            name: Erreur désamorçage
+          - type: divider
           - number.poolmaster_marche_max_quotidienne_pompes_doseuses
           - switch.poolmaster_arret_d_urgence_hors_filtration
