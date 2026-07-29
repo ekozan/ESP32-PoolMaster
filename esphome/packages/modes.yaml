@@ -7,6 +7,9 @@
 # ==============================================================================
 switch:
   - platform: template
+    web_server:
+      sorting_group_id: grp_regulation
+      sorting_weight: 10
     name: "Mode automatique"
     id: sw_auto_mode
     icon: mdi:refresh-auto
@@ -14,6 +17,9 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_regulation
+      sorting_weight: 20
     name: "Mode hiver"
     id: sw_winter_mode
     icon: mdi:snowflake

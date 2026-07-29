@@ -58,6 +58,9 @@ globals:
 
 number:
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 10
     name: "pH référence (solution étalon)"
     id: num_cal_ph_ref
     icon: mdi:test-tube
@@ -70,6 +73,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 80
     name: "ORP référence (solution étalon)"
     id: num_cal_orp_ref
     unit_of_measurement: "mV"
@@ -83,6 +89,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 150
     name: "Pression référence (manomètre)"
     id: num_cal_psi_ref
     unit_of_measurement: "bar"
@@ -98,6 +107,9 @@ number:
 
 sensor:
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 50
     name: "Points de calibration pH"
     id: sens_cal_ph_n
     icon: mdi:format-list-numbered
@@ -106,6 +118,9 @@ sensor:
     entity_category: diagnostic
     lambda: 'return id(cal_ph_n);'
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 120
     name: "Points de calibration ORP"
     id: sens_cal_orp_n
     icon: mdi:format-list-numbered
@@ -114,6 +129,9 @@ sensor:
     entity_category: diagnostic
     lambda: 'return id(cal_orp_n);'
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 190
     name: "Points de calibration Pression"
     id: sens_cal_psi_n
     icon: mdi:format-list-numbered
@@ -125,6 +143,9 @@ sensor:
 button:
   # --- pH ---
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 20
     name: "pH — enregistrer le point"
     icon: mdi:plus-circle
     on_press:
@@ -144,11 +165,17 @@ button:
           ESP_LOGI("calib", "pH point %d: %.4f V -> %.2f", i + 1,
                    id(cal_ph_v)[i], id(cal_ph_ref)[i]);
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 30
     name: "pH — calculer la calibration"
     icon: mdi:calculator-variant
     on_press:
       - script.execute: cal_compute_ph
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 40
     name: "pH — effacer les points"
     icon: mdi:delete
     on_press:
@@ -158,6 +185,9 @@ button:
 
   # --- ORP ---
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 90
     name: "ORP — enregistrer le point"
     icon: mdi:plus-circle
     on_press:
@@ -177,11 +207,17 @@ button:
           ESP_LOGI("calib", "ORP point %d: %.4f V -> %.0f mV", i + 1,
                    id(cal_orp_v)[i], id(cal_orp_ref)[i]);
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 100
     name: "ORP — calculer la calibration"
     icon: mdi:calculator-variant
     on_press:
       - script.execute: cal_compute_orp
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 110
     name: "ORP — effacer les points"
     icon: mdi:delete
     on_press:
@@ -191,6 +227,9 @@ button:
 
   # --- Pression ---
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 160
     name: "Pression — enregistrer le point"
     icon: mdi:plus-circle
     on_press:
@@ -210,11 +249,17 @@ button:
           ESP_LOGI("calib", "PSI point %d: %.4f V -> %.2f bar", i + 1,
                    id(cal_psi_v)[i], id(cal_psi_ref)[i]);
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 170
     name: "Pression — calculer la calibration"
     icon: mdi:calculator-variant
     on_press:
       - script.execute: cal_compute_psi
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 180
     name: "Pression — effacer les points"
     icon: mdi:delete
     on_press:

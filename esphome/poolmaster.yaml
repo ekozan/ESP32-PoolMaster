@@ -66,6 +66,7 @@ packages:
 
   # --- Interface locale ---
   status_leds:     !include packages/status_leds.yaml     # LEDs PCF8574 + buzzer
+  web_ui_groups:   !include packages/web-ui-groups.yaml   # sections de l'UI web
   # Écran tactile. La variante « UART brut » est le défaut : elle fonctionne
   # avec le fichier HMI d'origine, sans modification. Pour passer au composant
   # officiel ESPHome (mise à jour du .tft par WiFi, entités liées), remplacez

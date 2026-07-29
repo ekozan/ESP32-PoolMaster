@@ -7,6 +7,9 @@
 # ==============================================================================
 switch:
   - platform: gpio
+    web_server:
+      sorting_group_id: grp_commandes
+      sorting_weight: 50
     pin: ${pin_robot}
     name: "Robot"
     id: robot_pump
@@ -15,6 +18,9 @@ switch:
 
 number:
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 170
     name: "Robot délai après filtration"
     id: num_robot_delay
     unit_of_measurement: "min"
@@ -27,6 +33,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 180
     name: "Robot durée"
     id: num_robot_duration
     unit_of_measurement: "min"

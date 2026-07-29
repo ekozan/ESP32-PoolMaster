@@ -9,6 +9,9 @@
 # ==============================================================================
 number:
   - platform: template
+    web_server:
+      sorting_group_id: grp_securite
+      sorting_weight: 60
     name: "Seuil surpression"
     id: num_psi_high
     unit_of_measurement: "bar"
@@ -22,6 +25,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_securite
+      sorting_weight: 70
     name: "Marche max quotidienne pompes doseuses"
     id: num_max_uptime
     unit_of_measurement: "min"
@@ -52,6 +58,9 @@ switch:
   # seul. Pensez donc à le désarmer explicitement.
   # ----------------------------------------------------------------------------
   - platform: template
+    web_server:
+      sorting_group_id: grp_securite
+      sorting_weight: 10
     name: "Arrêt d'urgence (hors filtration)"
     id: sw_safe_stop
     icon: mdi:hand-back-right-off
@@ -77,20 +86,32 @@ switch:
 
 binary_sensor:
   - platform: template
+    web_server:
+      sorting_group_id: grp_securite
+      sorting_weight: 20
     name: "Erreur surpression"
     device_class: problem
     lambda: 'return id(psi_error);'
   - platform: template
+    web_server:
+      sorting_group_id: grp_securite
+      sorting_weight: 30
     name: "Erreur temps de marche pompe pH"
     device_class: problem
     lambda: 'return id(ph_uptime_error);'
   - platform: template
+    web_server:
+      sorting_group_id: grp_securite
+      sorting_weight: 40
     name: "Erreur temps de marche pompe Chlore"
     device_class: problem
     lambda: 'return id(chl_uptime_error);'
 
 button:
   - platform: template
+    web_server:
+      sorting_group_id: grp_securite
+      sorting_weight: 50
     name: "Acquitter les erreurs"
     icon: mdi:alert-circle-check
     on_press:

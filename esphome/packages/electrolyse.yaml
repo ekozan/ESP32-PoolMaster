@@ -9,6 +9,9 @@
 # ==============================================================================
 switch:
   - platform: gpio
+    web_server:
+      sorting_group_id: grp_commandes
+      sorting_weight: 40
     pin: ${pin_swg}
     name: "Électrolyseur"
     id: swg_pump
@@ -16,6 +19,9 @@ switch:
     restore_mode: ALWAYS_OFF
 
   - platform: template
+    web_server:
+      sorting_group_id: grp_regulation
+      sorting_weight: 70
     name: "Mode électrolyseur"
     id: sw_electrolyse_mode
     icon: mdi:water-plus
@@ -25,6 +31,9 @@ switch:
 
 number:
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 150
     name: "Électrolyseur température mini"
     id: num_swg_temp
     unit_of_measurement: "°C"
@@ -38,6 +47,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 160
     name: "Électrolyseur délai après filtration"
     id: num_swg_delay
     unit_of_measurement: "min"

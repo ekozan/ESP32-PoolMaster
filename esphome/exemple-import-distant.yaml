@@ -87,6 +87,7 @@ packages:
       - esphome/packages/auxiliary.yaml
       # --- Interface locale ---
       - esphome/packages/status_leds.yaml
+      - esphome/packages/web-ui-groups.yaml
       - esphome/packages/nextion-uart-brut.yaml
 
 # ==============================================================================

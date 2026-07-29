@@ -47,6 +47,9 @@ sensor:
 
   # --- Valeurs calibrées ---
   - platform: template
+    web_server:
+      sorting_group_id: grp_mesures
+      sorting_weight: 10
     name: "pH"
     id: ph_val
     icon: mdi:ph
@@ -57,6 +60,9 @@ sensor:
       if (!id(ph_volts).has_state()) return {};
       return id(ph_volts).state * id(num_ph_c0).state + id(num_ph_c1).state;
   - platform: template
+    web_server:
+      sorting_group_id: grp_mesures
+      sorting_weight: 20
     name: "ORP"
     id: orp_val
     unit_of_measurement: "mV"
@@ -68,6 +74,9 @@ sensor:
       if (!id(orp_volts).has_state()) return {};
       return id(orp_volts).state * id(num_orp_c0).state + id(num_orp_c1).state;
   - platform: template
+    web_server:
+      sorting_group_id: grp_mesures
+      sorting_weight: 30
     name: "Pression filtration"
     id: psi_val
     unit_of_measurement: "bar"
@@ -86,6 +95,9 @@ sensor:
   # plusieurs, ajoutez `address: 0x...` (les adresses d'origine sont dans
   # src/Loops.cpp).
   - platform: dallas_temp
+    web_server:
+      sorting_group_id: grp_mesures
+      sorting_weight: 40
     one_wire_id: ow_water
     name: "Température eau"
     id: water_temp
@@ -94,6 +106,9 @@ sensor:
     filters:
       - filter_out: nan
   - platform: dallas_temp
+    web_server:
+      sorting_group_id: grp_mesures
+      sorting_weight: 50
     one_wire_id: ow_air
     name: "Température air"
     id: air_temp
@@ -105,6 +120,9 @@ sensor:
 # --- Calibration linéaire : valeur = tension(V) * C0 + C1 ---
 number:
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 60
     name: "pH calibration C0"
     id: num_ph_c0
     min_value: -100
@@ -116,6 +134,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 70
     name: "pH calibration C1"
     id: num_ph_c1
     min_value: -100
@@ -127,6 +148,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 130
     name: "ORP calibration C0"
     id: num_orp_c0
     min_value: -2000
@@ -138,6 +162,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 140
     name: "ORP calibration C1"
     id: num_orp_c1
     min_value: -2000
@@ -149,6 +176,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 200
     name: "PSI calibration C0"
     id: num_psi_c0
     min_value: -100
@@ -160,6 +190,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_calibration
+      sorting_weight: 210
     name: "PSI calibration C1"
     id: num_psi_c1
     min_value: -100

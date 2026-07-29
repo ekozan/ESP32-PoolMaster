@@ -1,0 +1,48 @@
+# ==============================================================================
+# Groupes de l'interface web embarquée
+# ==============================================================================
+# Sans groupes, les 89 entités s'affichent en une seule liste plate sur le
+# serveur web — c'est ce qui rend la page illisible. Ce paquet déclare les
+# sections ; chaque entité indique son appartenance dans son propre paquet :
+#
+#     web_server:
+#       sorting_group_id: grp_xxx
+#       sorting_weight: N          # ordonne à l'intérieur du groupe
+#
+# Pourquoi un paquet séparé plutôt que dans network.yaml : les fichiers
+# d'entrée qui définissent leur propre `web_server:` (les deux exemples)
+# n'importent pas network.yaml. Comme la fusion ESPHome combine les
+# dictionnaires clé par clé, ce paquet ajoute `sorting_groups:` à leur bloc
+# `web_server:` sans écraser leur port ni leur authentification.
+#
+# ⚠ Réservé à `web_server: version: 3`, et à importer par TOUT fichier d'entrée
+# qui inclut les paquets d'entités — sinon la validation échoue sur
+# « Couldn't find ID 'grp_…' ».
+# ==============================================================================
+web_server:
+  version: 3
+  sorting_groups:
+    - id: grp_mesures
+      name: "Mesures"
+      sorting_weight: 10
+    - id: grp_etat
+      name: "État de la piscine"
+      sorting_weight: 20
+    - id: grp_commandes
+      name: "Commandes"
+      sorting_weight: 30
+    - id: grp_regulation
+      name: "Modes et régulation"
+      sorting_weight: 40
+    - id: grp_securite
+      name: "Sécurité"
+      sorting_weight: 50
+    - id: grp_calibration
+      name: "Calibration"
+      sorting_weight: 60
+    - id: grp_reglages
+      name: "Réglages avancés"
+      sorting_weight: 70
+    - id: grp_diagnostic
+      name: "Diagnostic"
+      sorting_weight: 80

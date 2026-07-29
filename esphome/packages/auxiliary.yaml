@@ -3,12 +3,18 @@
 # ==============================================================================
 switch:
   - platform: gpio
+    web_server:
+      sorting_group_id: grp_commandes
+      sorting_weight: 70
     pin: ${pin_relay_r0}
     name: "Relais R0 (projecteur)"
     id: relay_r0
     icon: mdi:lightbulb
     restore_mode: RESTORE_DEFAULT_OFF
   - platform: gpio
+    web_server:
+      sorting_group_id: grp_commandes
+      sorting_weight: 80
     pin: ${pin_relay_r1}
     name: "Relais R1"
     id: relay_r1

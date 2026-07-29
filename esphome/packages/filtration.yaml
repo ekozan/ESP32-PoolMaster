@@ -11,6 +11,9 @@
 # ==============================================================================
 switch:
   - platform: gpio
+    web_server:
+      sorting_group_id: grp_commandes
+      sorting_weight: 10
     pin: ${pin_filtration}
     name: "Pompe filtration"
     id: filtration_pump
@@ -21,6 +24,9 @@ switch:
 
 number:
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 10
     name: "Filtration heure min"
     id: num_filt_start_min
     unit_of_measurement: "h"
@@ -34,6 +40,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 20
     name: "Filtration heure max"
     id: num_filt_stop_max
     unit_of_measurement: "h"
@@ -49,21 +58,33 @@ number:
 
 sensor:
   - platform: template
+    web_server:
+      sorting_group_id: grp_etat
+      sorting_weight: 10
     name: "Filtration début"
+    state_class: measurement
     unit_of_measurement: "h"
     icon: mdi:clock-start
     accuracy_decimals: 0
     update_interval: 60s
     lambda: 'return id(filt_start_h);'
   - platform: template
+    web_server:
+      sorting_group_id: grp_etat
+      sorting_weight: 20
     name: "Filtration fin"
+    state_class: measurement
     unit_of_measurement: "h"
     icon: mdi:clock-end
     accuracy_decimals: 0
     update_interval: 60s
     lambda: 'return id(filt_stop_h);'
   - platform: template
+    web_server:
+      sorting_group_id: grp_etat
+      sorting_weight: 30
     name: "Filtration durée"
+    state_class: measurement
     unit_of_measurement: "h"
     icon: mdi:timelapse
     accuracy_decimals: 0
@@ -72,12 +93,18 @@ sensor:
 
 binary_sensor:
   - platform: template
+    web_server:
+      sorting_group_id: grp_etat
+      sorting_weight: 40
     name: "Antigel actif"
     icon: mdi:snowflake-alert
     lambda: 'return id(antifreeze_on);'
 
 button:
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 30
     name: "Recalculer la plage de filtration"
     icon: mdi:calculator
     on_press:

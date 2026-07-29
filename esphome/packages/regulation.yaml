@@ -11,6 +11,9 @@
 # ==============================================================================
 switch:
   - platform: template
+    web_server:
+      sorting_group_id: grp_regulation
+      sorting_weight: 30
     name: "Régulation pH auto"
     id: sw_ph_auto
     icon: mdi:ph
@@ -18,6 +21,9 @@ switch:
     restore_mode: RESTORE_DEFAULT_OFF
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_regulation
+      sorting_weight: 40
     name: "Régulation ORP auto"
     id: sw_orp_auto
     icon: mdi:flash-auto
@@ -29,6 +35,9 @@ number:
   # Consignes de température : servent aussi au calcul de la durée de
   # filtration (filtration.yaml).
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 40
     name: "Consigne température eau"
     id: num_water_setpoint
     unit_of_measurement: "°C"
@@ -42,6 +51,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 50
     name: "Seuil température eau basse"
     id: num_water_low
     unit_of_measurement: "°C"
@@ -55,6 +67,9 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 60
     name: "Délai démarrage PID"
     id: num_delay_pid
     unit_of_measurement: "min"

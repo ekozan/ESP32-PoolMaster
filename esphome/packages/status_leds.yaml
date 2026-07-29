@@ -55,6 +55,9 @@ switch:
     restore_mode: ALWAYS_OFF
 
   - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 250
     name: "Buzzer activé"
     id: sw_buzzer_enabled
     icon: mdi:volume-high

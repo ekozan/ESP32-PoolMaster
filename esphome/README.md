@@ -39,6 +39,7 @@ poolmaster.yaml            substitutions (brochage) + liste des paquets
 exemple-webui-wifi-ota.yaml  variante : WiFi/OTA/serveur web détaillés
 exemple-import-distant.yaml  variante : paquets importés depuis GitHub
 secrets.yaml               vos identifiants (non versionné)
+homeassistant/dashboard.yaml  tableau de bord HA (courbes incluses)
 packages/
   device.yaml              carte ESP32, framework, logger, diagnostics
   network.yaml             WiFi, API Home Assistant, OTA, serveur web
@@ -58,6 +59,7 @@ packages/
   safety.yaml              surpression, temps de marche max, acquittement
   auxiliary.yaml           relais libres R0 / R1
   status_leds.yaml         LEDs PCF8574 + buzzer
+  web-ui-groups.yaml       sections de l'interface web embarquée
   nextion-uart-brut.yaml   écran Nextion — protocole d'origine (PAR DÉFAUT)
   nextion.yaml             variante : composant officiel + MAJ .tft WiFi
 ```
@@ -184,6 +186,62 @@ dans les bacs, plage de filtration calculée) sont dans le même cas — voir
 Sont en revanche volontairement **non** persistants : les drapeaux d'erreur
 (`psi_error`, `ph_uptime_error`…), qui repartent à zéro au démarrage plutôt
 que de laisser un défaut ancien bloquer la régulation après un reboot.
+
+### Interfaces : web embarquée et Home Assistant
+
+**Interface web embarquée** (port 80). Les 89 entités s'affichaient en une
+liste plate, ce qui rendait la page illisible. Elles sont maintenant réparties
+en huit sections via les groupes de tri de `web_server` version 3 :
+
+| Section | Contenu |
+|---|---|
+| Mesures | pH, ORP, pression, températures |
+| État de la piscine | plage de filtration, niveaux des bacs, contacts, antigel |
+| Commandes | les huit pompes et relais |
+| Modes et régulation | modes auto/hiver, PID, consignes pH et ORP |
+| Sécurité | arrêt d'urgence, erreurs, seuils, acquittement |
+| Calibration | étalons, boutons, coefficients C0/C1 |
+| Réglages avancés | Kp/Ki/Kd, fenêtres, horaires, débits, volumes |
+| Diagnostic | uptime, RSSI, temps de marche, redémarrage |
+
+Les groupes sont déclarés dans `packages/web-ui-groups.yaml` et chaque entité
+indique son appartenance dans son propre paquet :
+
+```yaml
+    web_server:
+      sorting_group_id: grp_mesures
+      sorting_weight: 10        # ordonne à l'intérieur du groupe
+```
+
+Ce paquet est séparé de `network.yaml` à dessein : les fichiers d'entrée qui
+définissent leur propre `web_server:` n'importent pas `network.yaml`, et comme
+la fusion ESPHome combine les dictionnaires clé par clé, ce paquet leur ajoute
+les groupes sans écraser leur port ni leur authentification. **Tout fichier
+d'entrée qui inclut les paquets d'entités doit l'importer**, sinon la
+validation échoue sur *« Couldn't find ID 'grp_…' »*.
+
+### Courbes
+
+L'interface embarquée n'a pas d'historique : les courbes viennent de **Home
+Assistant**, qui enregistre automatiquement tout capteur déclarant un
+`state_class`. C'est le cas de **14 des 17 capteurs** (les 3 restants sont des
+compteurs de diagnostic).
+
+`homeassistant/dashboard.yaml` est un tableau de bord prêt à coller, sans
+aucune dépendance HACS, avec trois vues :
+
+- **Vue d'ensemble** — jauges pH et ORP, températures, commandes, alarmes ;
+- **Courbes** — pH et ORP superposés à leur consigne (on voit l'effet de
+  chaque dosage), températures sur 7 jours, **pression sur 30 jours** (la
+  montée signale l'encrassement du filtre : c'est le meilleur indicateur du
+  moment où faire un contre-lavage), consommation des bacs, et des graphes
+  `statistics-graph` moyenne/min/max par jour sur 30 à 90 jours ;
+- **Réglages** — consignes, filtration, calibration, sécurité.
+
+Les identifiants d'entités y dérivent du nom de l'appareil : avec
+`name: poolmaster`, « Température eau » devient
+`sensor.poolmaster_temperature_eau`. Si vous renommez l'appareil, remplacez le
+préfixe.
 
 ### Arrêt d'urgence (hors filtration)
 

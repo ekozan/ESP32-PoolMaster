@@ -51,14 +51,23 @@ logger:
 
 sensor:
   - platform: uptime
+    web_server:
+      sorting_group_id: grp_diagnostic
+      sorting_weight: 10
     name: "Uptime"
     entity_category: diagnostic
   - platform: wifi_signal
+    web_server:
+      sorting_group_id: grp_diagnostic
+      sorting_weight: 20
     name: "WiFi RSSI"
     update_interval: 60s
     entity_category: diagnostic
 
 button:
   - platform: restart
+    web_server:
+      sorting_group_id: grp_diagnostic
+      sorting_weight: 50
     name: "Redémarrer"
     entity_category: diagnostic
