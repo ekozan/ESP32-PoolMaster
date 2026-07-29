@@ -40,6 +40,8 @@ exemple-webui-wifi-ota.yaml  variante : WiFi/OTA/serveur web détaillés
 exemple-import-distant.yaml  variante : paquets importés depuis GitHub
 secrets.yaml               vos identifiants (non versionné)
 homeassistant/dashboard.yaml  tableau de bord HA (courbes incluses)
+homeassistant/themes/poolmaster.yaml  thème HA (palette piscine, clair + sombre)
+web-ui.css                 habillage optionnel de l'interface embarquée
 packages/
   device.yaml              carte ESP32, framework, logger, diagnostics
   network.yaml             WiFi, API Home Assistant, OTA, serveur web
@@ -219,6 +221,45 @@ la fusion ESPHome combine les dictionnaires clé par clé, ce paquet leur ajoute
 les groupes sans écraser leur port ni leur authentification. **Tout fichier
 d'entrée qui inclut les paquets d'entités doit l'importer**, sinon la
 validation échoue sur *« Couldn't find ID 'grp_…' »*.
+
+### Couleurs et style
+
+Deux surfaces, avec des marges de manœuvre très inégales — autant le dire tout
+de suite.
+
+**Home Assistant : c'est là que le style se fait.** `homeassistant/themes/poolmaster.yaml`
+est un thème natif, **sans HACS**, en palette « eau de piscine » : bleus et
+turquoise pour le normal, ambre et rouge réservés aux alertes pour qu'elles
+ressortent. Les deux variantes claire et sombre sont fournies, Home Assistant
+bascule seul. Copiez-le dans `<config>/themes/`, assurez-vous d'avoir
+`frontend: themes: !include_dir_merge_named themes` dans `configuration.yaml`,
+et redémarrez. Le tableau de bord porte déjà `theme: PoolMaster`, donc le
+thème ne s'applique qu'à lui et le reste de votre installation ne bouge pas.
+
+Le tableau de bord tire parti du thème : badges d'alerte en haut de la vue
+d'ensemble, `state_color: true` sur les cartes d'entités — une pompe en marche
+passe en turquoise, une alarme active en rouge —, jauges pH, ORP, température
+et pression avec seuils colorés, et une palette de courbes cohérente.
+
+**Interface web embarquée : marge limitée, autant le savoir.** `web_server`
+accepte `css_include:`, qui embarque un CSS dans le firmware et ajoute
+`<link rel=stylesheet href=/0.css>` à la page. Mais l'UI v3 est bâtie en *web
+components* : le CSS ordinaire ne traverse pas le shadow DOM.
+
+| Ce qui passe | Ce qui ne passe pas |
+|---|---|
+| fond de page, police, marges, largeur | cibler `.card`, `table`, `button`… |
+| variables CSS (`--nom`), par héritage | tout sélecteur d'élément interne |
+
+`web-ui.css` fait ce qui est faisable : dégradé de fond clair/sombre, police
+système, largeur de lecture limitée. Il déclare aussi des variables CSS, mais
+**leurs noms ne sont pas vérifiés** — le bundle v3 est servi depuis un CDN qui
+n'a pas pu être inspecté ici. Pour trouver les vrais noms : F12, sélectionnez
+`<esp-app>`, onglet « Computed », filtrez sur `--`. Les variables inutiles sont
+ignorées sans rien casser.
+
+L'option est commentée dans `packages/network.yaml` ; le chemin se résout
+depuis le dossier de configuration, pas depuis le paquet.
 
 ### Courbes
 

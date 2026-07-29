@@ -19,11 +19,32 @@
 # ==============================================================================
 title: Piscine
 
+# Thème appliqué à ce seul tableau de bord — le reste de Home Assistant garde
+# le vôtre. Copiez themes/poolmaster.yaml dans <config>/themes/ (voir son
+# en-tête), sinon cette ligne est simplement ignorée.
+theme: PoolMaster
+
 views:
   # ----------------------------------------------------------------------------
   - title: Vue d'ensemble
     path: piscine
     icon: mdi:pool
+
+    # Badges en haut de vue : ce qui doit sauter aux yeux sans faire défiler.
+    # `state_color` les colore selon l'état — rouge sur les `device_class:
+    # problem` actifs, grâce au thème.
+    badges:
+      - entity: sensor.poolmaster_temperature_eau
+        name: Eau
+      - entity: sensor.poolmaster_ph
+        name: pH
+      - entity: sensor.poolmaster_orp
+        name: ORP
+      - entity: binary_sensor.poolmaster_erreur_surpression
+        name: Pression
+      - entity: switch.poolmaster_arret_d_urgence_hors_filtration
+        name: Urgence
+
     cards:
       - type: horizontal-stack
         cards:
@@ -43,19 +64,39 @@ views:
             needle: true
             severity: { red: 400, yellow: 600, green: 700 }
 
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            entity: sensor.poolmaster_temperature_eau
+            name: Eau
+            min: 0
+            max: 35
+            needle: true
+            # Vert à partir de la plage de baignade, ambre en dessous.
+            severity: { red: 0, yellow: 12, green: 22 }
+          - type: gauge
+            entity: sensor.poolmaster_pression_filtration
+            name: Pression
+            unit: bar
+            min: 0
+            max: 2
+            needle: true
+            # Le rouge démarre au seuil de surpression par défaut (1,0 bar).
+            severity: { green: 0, yellow: 0.8, red: 1.0 }
+
       - type: glance
-        title: Eau
-        columns: 3
+        title: Températures
+        columns: 2
+        state_color: true
         entities:
           - entity: sensor.poolmaster_temperature_eau
             name: Eau
           - entity: sensor.poolmaster_temperature_air
             name: Air
-          - entity: sensor.poolmaster_pression_filtration
-            name: Pression
 
       - type: entities
         title: Commandes
+        state_color: true          # pompe en marche = icône turquoise
         entities:
           - switch.poolmaster_pompe_filtration
           - switch.poolmaster_pompe_ph
@@ -70,6 +111,7 @@ views:
 
       - type: entities
         title: Bacs et niveaux
+        state_color: true
         entities:
           - sensor.poolmaster_niveau_bac_ph
           - sensor.poolmaster_niveau_bac_chlore
@@ -79,6 +121,7 @@ views:
 
       - type: entities
         title: Alarmes
+        state_color: true          # une alarme active passe en rouge
         entities:
           - binary_sensor.poolmaster_erreur_surpression
           - binary_sensor.poolmaster_erreur_temps_de_marche_pompe_ph
