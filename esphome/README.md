@@ -222,6 +222,24 @@ les groupes sans écraser leur port ni leur authentification. **Tout fichier
 d'entrée qui inclut les paquets d'entités doit l'importer**, sinon la
 validation échoue sur *« Couldn't find ID 'grp_…' »*.
 
+### Pression : deux capteurs, un seul est à tracer
+
+La pression n'existe que si la **pompe de recirculation** tourne. À l'arrêt le
+manomètre retombe à zéro, et ce zéro ne dit rien de l'état du filtre.
+
+| Entité | Publie | À quoi elle sert |
+|---|---|---|
+| `Pression filtration` | en continu, toutes les 2 s | sécurité surpression, assistant d'étalonnage, lecture instantanée |
+| `Pression en filtration` | seulement pompe en marche depuis > 2 min | **tendance d'encrassement**, décision de contre-lavage |
+
+Le second ne publie rien hors de sa fenêtre — la dernière valeur valable est
+donc conservée. C'est lui qu'il faut tracer sur le long terme : la courbe du
+capteur brut est un peigne de zéros entre les cycles de filtration, dans lequel
+la lente montée due à l'encrassement est illisible.
+
+Le délai de 2 minutes est le même que celui de la sécurité surpression : le
+temps que le régime hydraulique s'établisse après le démarrage.
+
 ### Couleurs et style
 
 Deux surfaces, avec des marges de manœuvre très inégales — autant le dire tout
@@ -273,10 +291,9 @@ aucune dépendance HACS, avec trois vues :
 
 - **Vue d'ensemble** — jauges pH et ORP, températures, commandes, alarmes ;
 - **Courbes** — pH et ORP superposés à leur consigne (on voit l'effet de
-  chaque dosage), températures sur 7 jours, **pression sur 30 jours** (la
-  montée signale l'encrassement du filtre : c'est le meilleur indicateur du
-  moment où faire un contre-lavage), consommation des bacs, et des graphes
-  `statistics-graph` moyenne/min/max par jour sur 30 à 90 jours ;
+  chaque dosage), températures sur 7 jours, **tendance d'encrassement du
+  filtre sur 60 jours**, consommation des bacs, et des graphes
+  `statistics-graph` moyenne/min/max par jour ;
 - **Réglages** — consignes, filtration, calibration, sécurité.
 
 Les identifiants d'entités y dérivent du nom de l'appareil : avec

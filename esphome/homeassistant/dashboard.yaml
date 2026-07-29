@@ -165,14 +165,26 @@ views:
           - entity: sensor.poolmaster_temperature_air
             name: Air
 
-      # La pression monte quand le filtre s'encrasse : cette courbe sur un mois
-      # est le meilleur indicateur du moment où faire un contre-lavage.
+      # Indicateur de contre-lavage. On trace « Pression en filtration », qui
+      # ne publie QUE lorsque la pompe de recirculation tourne depuis plus de
+      # 2 min : la pression brute retomberait à zéro entre les cycles et la
+      # tendance d'encrassement serait noyée dans les arrêts de pompe.
+      - type: statistics-graph
+        title: Pression en filtration — tendance d'encrassement (60 jours)
+        days_to_show: 60
+        stat_types: [mean, max]
+        entities:
+          - sensor.poolmaster_pression_en_filtration
+
+      # Pression brute sur 48 h : utile au diagnostic, on y voit les cycles.
       - type: history-graph
-        title: Pression filtration (30 jours)
-        hours_to_show: 720
+        title: Pression brute (48 h)
+        hours_to_show: 48
         entities:
           - entity: sensor.poolmaster_pression_filtration
-            name: Pression
+            name: Pression brute
+          - entity: switch.poolmaster_pompe_filtration
+            name: Recirculation
 
       - type: history-graph
         title: Consommation des bacs (30 jours)
