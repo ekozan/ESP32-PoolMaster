@@ -135,7 +135,7 @@ nécessaire pour changer une consigne.
 | Type | Nombre | Exemples |
 |---|---|---|
 | `number` | 34 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, volumes et débits des bacs, coefficients C0/C1, valeurs des étalons de calibration |
-| `switch` | 16 | mode auto, mode hiver, pompes, PID pH/ORP, mode électrolyseur, relais R0/R1, buzzer |
+| `switch` | 17 | arrêt d'urgence, mode auto, mode hiver, pompes, PID pH/ORP, mode électrolyseur, relais R0/R1, buzzer |
 | `button` | 14 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, redémarrer, et 9 boutons de calibration (enregistrer / calculer / effacer × 3 sondes) |
 
 Les 34 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
@@ -150,6 +150,40 @@ dans les bacs, plage de filtration calculée) sont dans le même cas — voir
 Sont en revanche volontairement **non** persistants : les drapeaux d'erreur
 (`psi_error`, `ph_uptime_error`…), qui repartent à zéro au démarrage plutôt
 que de laisser un défaut ancien bloquer la régulation après un reboot.
+
+### Arrêt d'urgence (hors filtration)
+
+Le switch **« Arrêt d'urgence (hors filtration) »** coupe tout ce qui injecte
+ou consomme, mais **laisse l'eau circuler** :
+
+| Coupé | Conservé |
+|---|---|
+| pompe pH, pompe Chlore | **pompe de filtration** (recirculation) |
+| électrolyseur | relais libres R0 / R1 |
+| robot | buzzer et LEDs de statut |
+| pompe de remplissage | |
+| boucles PID pH et ORP | |
+
+La filtration n'est délibérément pas touchée : elle continue de suivre son
+programme, protection antigel comprise. Garder la recirculation homogénéise ce
+qui a déjà été dosé et maintient des mesures pH/ORP représentatives pendant
+l'incident — une sonde dans de l'eau stagnante ne mesure plus le bassin.
+
+Deux points de conception :
+
+- **Ce n'est pas une action ponctuelle.** Le switch coupe immédiatement à
+  l'armement, mais surtout la condition `sw_safe_stop` est ajoutée à *tous* les
+  verrous existants — dosage pH, dosage ORP, électrolyseur, robot, remplissage,
+  et activation automatique des PID. Sans cela, le tick suivant relancerait une
+  pompe une seconde plus tard.
+- **L'état survit au redémarrage** (`RESTORE_DEFAULT_OFF`). Si vous l'armez à
+  cause d'une fuite, un reboot ne doit pas relancer le dosage tout seul. En
+  contrepartie, pensez à le désarmer explicitement — tant qu'il est armé, plus
+  aucune régulation n'a lieu.
+
+Il est pilotable depuis Home Assistant, l'interface web, et depuis l'écran
+Nextion via la clé `safe_stop` (voir le tableau des noms plus haut) si vous
+ajoutez un bouton au HMI.
 
 ### Calibration multi-points embarquée
 
@@ -269,6 +303,7 @@ Noms attendus par `packages/nextion.yaml`, à reprendre tels quels :
 | `robot` | Robot | `ENMC_ROBOT` (17) |
 | `lights` | Projecteur (relais R0) | `ENMC_LIGHTS` (18) |
 | `spare` | Relais R1 | `ENMC_SPARE` (19) |
+| `safe_stop` | Arrêt d'urgence (hors filtration) | — (nouveau) |
 | `clear_alarms` | Acquitter les erreurs | `ENMC_CLEAR_ALARMS` (20) |
 | `fill_pump` | Pompe de remplissage | `ENMC_FILLING_PUMP` (21) |
 
@@ -476,7 +511,8 @@ OTA.
     d'amorçage) ;
   - temps de marche quotidien maximal des pompes doseuses ;
   - verrouillage des doseuses et du SWG sur la filtration ;
-  - arrêt du dosage si bac vide (contact de niveau).
+  - arrêt du dosage si bac vide (contact de niveau) ;
+  - **arrêt d'urgence** manuel (voir ci-dessous).
   Les erreurs se réarment avec le bouton **« Acquitter les erreurs »**
   (équivalent de la commande `{"Clear":1}`).
 - **Bacs** : estimation du niveau (%) à partir du débit de pompe et du temps de

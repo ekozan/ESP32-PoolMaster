@@ -87,7 +87,8 @@ script:
           const bool water_ok = id(water_temp).has_state() &&
                                 id(water_temp).state >= id(num_water_low).state;
           const bool reg_ok = !winter && water_ok && id(filtration_pump).state &&
-                              in_reg_window && !id(psi_error);
+                              in_reg_window && !id(psi_error) &&
+                              !id(sw_safe_stop).state;
 
           if (id(sw_ph_auto).state) {
             const bool want_ph = reg_ok && !id(ph_uptime_error) &&

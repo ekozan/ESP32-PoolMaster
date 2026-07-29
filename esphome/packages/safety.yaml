@@ -35,6 +35,46 @@ number:
     mode: box
     entity_category: config
 
+switch:
+  # ----------------------------------------------------------------------------
+  # Arrêt d'urgence : coupe tout ce qui injecte ou consomme, mais laisse l'eau
+  # circuler. La filtration n'est délibérément pas touchée — elle continue de
+  # suivre son programme, y compris la protection antigel. Garder la
+  # recirculation permet d'homogénéiser ce qui a déjà été dosé et de conserver
+  # des mesures pH/ORP représentatives pendant l'incident.
+  #
+  # Sont coupés : pompes pH et Chlore, électrolyseur, robot, pompe de
+  # remplissage, et les deux boucles PID pour qu'elles ne relancent rien.
+  # Ne sont pas touchés : filtration, relais libres R0/R1, buzzer.
+  #
+  # L'état est conservé au redémarrage (RESTORE_DEFAULT_OFF) : si vous l'avez
+  # armé à cause d'une fuite, un reboot ne doit pas relancer le dosage tout
+  # seul. Pensez donc à le désarmer explicitement.
+  # ----------------------------------------------------------------------------
+  - platform: template
+    name: "Arrêt d'urgence (hors filtration)"
+    id: sw_safe_stop
+    icon: mdi:hand-back-right-off
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_on:
+      # Effet immédiat, sans attendre le tick suivant. Le maintien dans le
+      # temps est assuré par les verrous de chaque fonction, qui testent tous
+      # `sw_safe_stop` — couper ici ne suffirait pas, quelque chose pourrait
+      # relancer une pompe une seconde plus tard.
+      - switch.turn_off: ph_pump
+      - switch.turn_off: chl_pump
+      - switch.turn_off: swg_pump
+      - switch.turn_off: robot_pump
+      - switch.turn_off: fill_pump
+      - switch.turn_off: sw_ph_pid
+      - switch.turn_off: sw_orp_pid
+      - logger.log:
+          format: "ARRET D'URGENCE arme: dosage, electrolyse, robot et remplissage coupes (filtration conservee)"
+          level: WARN
+    on_turn_off:
+      - logger.log: "Arret d'urgence desarme"
+
 binary_sensor:
   - platform: template
     name: "Erreur surpression"
@@ -105,6 +145,7 @@ script:
               ESP_LOGE("poolmaster", "Pompe Chlore: temps de marche quotidien depasse");
             }
           }
+          if (id(sw_safe_stop).state && id(fill_pump).state) id(fill_pump).turn_off();
           if (id(fill_pump).state) {
             id(fill_uptime_s) += 1;
             if (id(fill_uptime_s) > max_up_s && !id(fill_uptime_error)) {

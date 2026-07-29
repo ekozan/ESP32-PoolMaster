@@ -124,6 +124,7 @@ display:
             else if (k == "fill_pump")   apply(id(fill_pump));
             else if (k == "swg_mode")    apply(id(sw_electrolyse_mode));
             else if (k == "swg")         apply(id(swg_pump));
+            else if (k == "safe_stop")   apply(id(sw_safe_stop));
             else if (k == "clear_alarms") {
               id(psi_error) = false;
               id(ph_uptime_error) = false;

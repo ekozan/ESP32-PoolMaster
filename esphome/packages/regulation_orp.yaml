@@ -109,6 +109,7 @@ script:
           // Verrouillages : filtration à l'arrêt, surpression, plafond de temps
           // de marche atteint, ou bac de chlore vide.
           const bool blocked = !id(filtration_pump).state || id(psi_error) ||
+                               id(sw_safe_stop).state ||
                                id(chl_uptime_error) || id(chl_tank_low).state;
 
           if (id(sw_orp_pid).state && !id(sw_electrolyse_mode).state &&

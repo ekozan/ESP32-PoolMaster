@@ -49,7 +49,8 @@ script:
           const uint32_t now = millis();
           const bool filt_on = id(filtration_pump).state;
 
-          if (id(sw_auto_mode).state && filt_on && !id(robot_done)) {
+          if (id(sw_auto_mode).state && filt_on && !id(robot_done) &&
+              !id(sw_safe_stop).state) {
             const uint32_t delay_ms = (uint32_t)(id(num_robot_delay).state * 60000.0f);
             const uint32_t dur_ms   = (uint32_t)(id(num_robot_duration).state * 60000.0f);
             if (!id(robot_pump).state &&
@@ -62,4 +63,5 @@ script:
               id(robot_done) = true;
             }
           }
-          if (!filt_on && id(robot_pump).state) id(robot_pump).turn_off();
+          if ((!filt_on || id(sw_safe_stop).state) && id(robot_pump).state)
+            id(robot_pump).turn_off();

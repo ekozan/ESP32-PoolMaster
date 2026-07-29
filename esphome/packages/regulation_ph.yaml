@@ -111,6 +111,7 @@ script:
           // Verrouillages : filtration à l'arrêt, surpression, plafond de temps
           // de marche atteint, ou bac d'acide vide.
           const bool blocked = !id(filtration_pump).state || id(psi_error) ||
+                               id(sw_safe_stop).state ||
                                id(ph_uptime_error) || id(ph_tank_low).state;
 
           if (id(sw_ph_pid).state && !blocked && id(ph_val).has_state()) {

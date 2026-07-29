@@ -125,7 +125,7 @@ captive_portal:
 # ==============================================================================
 # API Home Assistant
 # ==============================================================================
-# C'est par ici que remontent les 34 réglages, 16 interrupteurs et 14 boutons :
+# C'est par ici que remontent les 34 réglages, 17 interrupteurs et 14 boutons :
 # ils apparaissent tout seuls dans Home Assistant, sans YAML côté HA.
 api:
   encryption:

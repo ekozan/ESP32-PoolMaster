@@ -62,7 +62,7 @@ script:
           const bool filt_on = id(filtration_pump).state;
 
           if (id(sw_electrolyse_mode).state && id(sw_orp_auto).state) {
-            bool want = filt_on && !id(psi_error) &&
+            bool want = filt_on && !id(psi_error) && !id(sw_safe_stop).state &&
                         id(water_temp).has_state() &&
                         id(water_temp).state >= id(num_swg_temp).state &&
                         (now - id(filt_started_ms)) >
@@ -71,7 +71,8 @@ script:
                         id(orp_val).state < id(num_orp_setpoint).state;
             if (want && !id(swg_pump).state) id(swg_pump).turn_on();
             if (!want && id(swg_pump).state) id(swg_pump).turn_off();
-          } else if (!filt_on && id(swg_pump).state) {
-            // Verrouillage : jamais d'électrolyse sans circulation d'eau
+          } else if ((!filt_on || id(sw_safe_stop).state) && id(swg_pump).state) {
+            // Verrouillages : jamais d'électrolyse sans circulation d'eau, ni
+            // sous arrêt d'urgence.
             id(swg_pump).turn_off();
           }
