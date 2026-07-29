@@ -13,6 +13,16 @@ esphome:
     name: "ekozan.esp32-poolmaster"
     version: "ESPHome-1.0"
 
+  # Version minimale d'ESPHome. Valeur vérifiée : la configuration complète
+  # valide sous 2026.4.0. Sans cette ligne, ESPHome inscrit par défaut la
+  # version qui a généré le build, ce qui n'interdit jamais rien.
+  min_version: 2026.4.0
+
+  # Pas de suffixe MAC dans le nom d'hôte : l'appareil reste joignable en
+  # `poolmaster.local` quelle que soit la carte. À passer à `true` seulement si
+  # vous flashez plusieurs PoolMaster sur le même réseau.
+  name_add_mac_suffix: false
+
   # Compilation séquentielle. Par défaut ESPHome lance autant de compilateurs
   # que de cœurs ; sur l'add-on Home Assistant, plusieurs `cc1plus` en
   # parallèle sur les grosses unités (api_server.cpp, web_server) épuisent la
@@ -27,6 +37,12 @@ esphome:
 
 esp32:
   board: esp32doit-devkit-v1
+  # Variante déclarée en plus de la carte : ESPHome vérifie la cohérence des
+  # deux et refuse la configuration si elles divergent (« Option 'variant' does
+  # not match selected board »). C'est le garde-fou contre un binaire compilé
+  # pour une autre puce — la carte PoolMaster embarque un ESP32 classique
+  # (D0WDQ6), jamais un C3/C6/S3.
+  variant: esp32
   framework:
     type: esp-idf
 

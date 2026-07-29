@@ -435,6 +435,39 @@ Deux points en découlent :
 Les réglages persistants (consignes, calibrations, compteurs) vivent dans la
 partition `nvs` de 448 Ko et ne consomment rien sur le budget applicatif.
 
+## Cible matérielle et version d'ESPHome
+
+`packages/device.yaml` déclare **la carte et la variante de puce** :
+
+```yaml
+esp32:
+  board: esp32doit-devkit-v1
+  variant: esp32
+```
+
+Les deux ensemble ne sont pas redondants : ESPHome vérifie leur cohérence et
+refuse la configuration si elles divergent, avec *« Option 'variant' does not
+match selected board »*. C'est le garde-fou contre un binaire compilé pour une
+autre puce — si le flash échoue sur *« détecté ESP32-D0WDQ6 mais l'appareil
+attend esp32c6 »*, c'est que le binaire proposé ne vient pas de cette
+configuration.
+
+Côté version :
+
+```yaml
+esphome:
+  min_version: 2026.4.0
+  name_add_mac_suffix: false
+```
+
+`min_version` est une valeur **vérifiée** : la configuration complète valide
+sous ESPHome 2026.4.0. Sans cette ligne, ESPHome inscrit par défaut la version
+qui a généré le build, ce qui n'interdit jamais rien.
+
+`name_add_mac_suffix: false` garde l'appareil joignable en `poolmaster.local`
+quelle que soit la carte. À passer à `true` uniquement si vous flashez
+plusieurs PoolMaster sur le même réseau.
+
 ## Le buzzer est sur une broche de strapping (GPIO2)
 
 GPIO2 fait partie des broches de *strapping* de l'ESP32 (avec 0, 5, 12 et 15) :
