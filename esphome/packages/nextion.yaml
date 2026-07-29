@@ -53,9 +53,14 @@ display:
     uart_id: nextion_uart
     update_interval: 1s
 
-    # Le HMI doit être réglé à demeure sur 115200 (`bauds=115200` dans
-    # Program.s). Le composant officiel ne sait pas resynchroniser le débit
-    # comme le faisait le firmware d'origine après un `rest`.
+    # ⚠ ÉCRAN FIGÉ ? C'est presque toujours ici.
+    # Le HMI doit être réglé à demeure sur 115200 : `bauds=115200` (avec un
+    # « s », la variante PERSISTANTE) dans Program.s. Le firmware d'origine
+    # utilisait `baud=115200`, la variante volatile, et renégociait le débit à
+    # chaque démarrage — l'écran repart donc à 9600 à chaque mise sous tension.
+    # Le composant officiel ne sait pas faire cette renégociation : il ouvre
+    # l'UART à 115200 et parle. Si l'écran est à 9600, il n'entend rien.
+    # Solution rapide sans toucher au HMI : packages/nextion-uart-brut.yaml.
 
     # Si votre HMI utilise le mode « reparse » (recmod), décommentez :
     # exit_reparse_on_start: true

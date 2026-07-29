@@ -220,6 +220,54 @@ le firmware d'origine (`globals.vapH.txt="7.20"`, `pageHome.vaPercArrowPH.val=73
 le bitmap `globals.vaSwitches.val`, l'horloge `rtc0..rtc5`). Vos 21 pages
 s'affichent comme avant.
 
+#### Écran figé, aucune valeur affichée
+
+Cause la plus probable : **le débit série**. Le firmware d'origine utilisait
+`baud=115200`, la commande **volatile** — l'écran repart donc à **9600 à chaque
+mise sous tension**, et l'ancien firmware le remontait à chaque démarrage :
+
+```cpp
+myNex.writeStr(F("rest"));   // Nextion revient à 9600
+delay(800);
+myNex.begin(9600);
+Serial2.print("baud=115200"); // volatile : perdu à la coupure suivante
+myNex.begin(115200);
+```
+
+Le composant officiel ne sait pas faire cette renégociation : il ouvre l'UART
+à 115200 et parle. Si l'écran est à 9600, il n'entend rien et reste figé sur
+sa dernière image.
+
+Trois issues, de la plus rapide à la plus propre :
+
+1. **Revenir à la variante UART brut** (aucune modification du HMI). Elle
+   rejoue la séquence d'origine et refait fonctionner l'écran *et* les boutons
+   immédiatement :
+
+   ```yaml
+     nextion:  !include packages/nextion-uart-brut.yaml
+   ```
+
+2. **Test rapide** : passer l'UART de `packages/nextion.yaml` à
+   `baud_rate: 9600`. L'affichage revient (plus lent), les boutons restent
+   inertes tant que le HMI n'émet pas les trames `printh 91`.
+
+3. **La solution durable** : dans *Program.s* du HMI, écrire `bauds=115200`
+   — avec un **s**, la variante persistante — puis recharger le `.tft`.
+   L'écran démarrera alors directement au bon débit et le composant officiel
+   dialoguera sans négociation.
+
+Pour confirmer le diagnostic, passez le journal en debug et cherchez les
+lignes `nextion` :
+
+```yaml
+logger:
+  level: DEBUG
+```
+
+Silence complet côté Nextion = problème de débit. Des trames reçues mais des
+boutons sans effet = le HMI émet encore l'ancien protocole `printh 23`.
+
 #### Ce qu'il faut modifier dans le HMI
 
 Le problème est dans le sens écran → ESP32. Le composant officiel réserve
