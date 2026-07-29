@@ -172,11 +172,11 @@ nécessaire pour changer une consigne.
 
 | Type | Nombre | Exemples |
 |---|---|---|
-| `number` | 34 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, volumes et débits des bacs, coefficients C0/C1, valeurs des étalons de calibration |
+| `number` | 42 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, référence filtre propre et seuil d'encrassement, volumes et débits des bacs, coefficients C0/C1, valeurs des étalons de calibration |
 | `switch` | 17 | arrêt d'urgence, mode auto, mode hiver, pompes, PID pH/ORP, mode électrolyseur, relais R0/R1, buzzer |
-| `button` | 14 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, redémarrer, et 9 boutons de calibration (enregistrer / calculer / effacer × 3 sondes) |
+| `button` | 21 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, enregistrer la référence filtre propre, redémarrer, 5 boutons d'assistants guidés et 9 boutons de calibration manuelle (enregistrer / calculer / effacer × 3 sondes) |
 
-Les 34 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
+Les 42 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
 `restore_value: true` : la valeur est écrite dans la partition `nvs` et
 survit aux coupures de courant comme aux mises à jour OTA. Les valeurs
 `initial_value` du YAML ne servent qu'au tout premier démarrage.
@@ -191,7 +191,7 @@ que de laisser un défaut ancien bloquer la régulation après un reboot.
 
 ### Interfaces : web embarquée et Home Assistant
 
-**Interface web embarquée** (port 80). Les 89 entités s'affichaient en une
+**Interface web embarquée** (port 80). Les 110 entités s'affichaient en une
 liste plate, ce qui rendait la page illisible. Elles sont maintenant réparties
 en huit sections via les groupes de tri de `web_server` version 3 :
 
@@ -240,6 +240,48 @@ la lente montée due à l'encrassement est illisible.
 Le délai de 2 minutes est le même que celui de la sécurité surpression : le
 temps que le régime hydraulique s'établisse après le démarrage.
 
+### Encrassement du filtre et contre-lavage
+
+La règle est simple : **le filtre est à contre-laver quand la pression en
+fonctionnement dépasse la pression filtre propre de 200 mbar.** Le seuil est
+réglable, la référence aussi.
+
+| Entité | Rôle | Défaut |
+|---|---|---|
+| `Filtre propre — pression de référence` | pression relevée filtre propre | 0,50 bar |
+| `Seuil d'encrassement` | écart déclenchant l'alerte | 200 mbar |
+| `Encrassement du filtre` | écart mesuré, en mbar | — |
+| `Contre-lavage nécessaire` | alerte `device_class: problem` | — |
+| `Filtre propre — enregistrer la référence` | bouton de capture | — |
+
+**Le geste à faire.** Juste après un contre-lavage, relancez la filtration,
+attendez 2 minutes, puis pressez `Filtre propre — enregistrer la référence`.
+Le bouton relève la pression courante et la stocke en NVS. Sans ce geste la
+référence reste à sa valeur d'usine (0,50 bar) et l'indicateur ne veut rien
+dire sur votre installation — chaque filtre, chaque hydraulique a la sienne.
+
+Le bouton refuse de relever une référence pompe à l'arrêt ou dans les 2
+premières minutes de marche ; il l'écrit dans le journal plutôt que
+d'enregistrer une valeur fausse.
+
+`Encrassement du filtre` se lit directement contre le seuil : à +200 mbar il
+est temps. La valeur peut être négative si la référence avait été prise sur un
+filtre déjà un peu chargé — c'est sans gravité, reprenez la référence.
+
+`Contre-lavage nécessaire` exige **10 minutes** au-dessus du seuil avant de
+passer à l'état actif (et autant pour retomber) : l'encrassement est un
+phénomène de plusieurs semaines, les pointes au démarrage de la pompe ou lors
+d'une manœuvre de vanne ne doivent pas déclencher d'alerte.
+
+⚠ **À ne pas confondre avec `Seuil surpression`** (`safety.yaml`). Celui-là est
+une sécurité absolue : au-dessus, la filtration est coupée et une erreur est
+levée. L'encrassement, lui, est un indicateur d'entretien — il ne coupe rien,
+il vous dit d'aller manœuvrer la vanne.
+
+Tout est calculé sur `Pression en filtration`, jamais sur le capteur brut : le
+brut retombe à zéro entre les cycles, ce qui ferait clignoter l'alerte à chaque
+arrêt de pompe.
+
 ### Couleurs et style
 
 Deux surfaces, avec des marges de manœuvre très inégales — autant le dire tout
@@ -283,18 +325,20 @@ depuis le dossier de configuration, pas depuis le paquet.
 
 L'interface embarquée n'a pas d'historique : les courbes viennent de **Home
 Assistant**, qui enregistre automatiquement tout capteur déclarant un
-`state_class`. C'est le cas de **14 des 17 capteurs** (les 3 restants sont des
+`state_class`. C'est le cas de **16 des 19 capteurs** (les 3 restants sont des
 compteurs de diagnostic).
 
 `homeassistant/dashboard.yaml` est un tableau de bord prêt à coller, sans
 aucune dépendance HACS, avec trois vues :
 
-- **Vue d'ensemble** — jauges pH et ORP, températures, commandes, alarmes ;
+- **Vue d'ensemble** — jauges pH et ORP, températures, commandes, état du
+  filtre, alarmes ;
 - **Courbes** — pH et ORP superposés à leur consigne (on voit l'effet de
   chaque dosage), températures sur 7 jours, **tendance d'encrassement du
-  filtre sur 60 jours**, consommation des bacs, et des graphes
-  `statistics-graph` moyenne/min/max par jour ;
-- **Réglages** — consignes, filtration, calibration, sécurité.
+  filtre sur 60 jours** et l'écart à la référence tracé contre son seuil,
+  consommation des bacs, et des graphes `statistics-graph` moyenne/min/max
+  par jour ;
+- **Réglages** — consignes, filtration, contre-lavage, calibration, sécurité.
 
 Les identifiants d'entités y dérivent du nom de l'appareil : avec
 `name: poolmaster`, « Température eau » devient

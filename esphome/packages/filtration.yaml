@@ -56,7 +56,65 @@ number:
     mode: box
     entity_category: config
 
+  # --- Encrassement du filtre ------------------------------------------------
+  # Règle métier : le filtre est à contre-laver quand la pression en
+  # fonctionnement dépasse la pression FILTRE PROPRE de 200 mbar.
+  #
+  # À ne pas confondre avec « Seuil surpression » (safety.yaml) : celui-là est
+  # une sécurité absolue qui coupe la filtration, celui-ci est un indicateur
+  # d'entretien qui ne coupe rien.
+  - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 4
+    name: "Filtre propre — pression de référence"
+    id: num_psi_clean
+    unit_of_measurement: "bar"
+    icon: mdi:filter-check
+    min_value: 0
+    max_value: 3
+    step: 0.01
+    initial_value: 0.5
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+  - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 5
+    name: "Seuil d'encrassement"
+    id: num_psi_clog
+    unit_of_measurement: "mbar"
+    icon: mdi:filter-remove
+    min_value: 50
+    max_value: 1000
+    step: 10
+    initial_value: 200
+    optimistic: true
+    restore_value: true
+    mode: box
+    entity_category: config
+
 sensor:
+  - platform: template
+    web_server:
+      sorting_group_id: grp_etat
+      sorting_weight: 5
+    name: "Encrassement du filtre"
+    id: sens_clog
+    unit_of_measurement: "mbar"
+    icon: mdi:filter
+    accuracy_decimals: 0
+    state_class: measurement
+    update_interval: 60s
+    # Écart à la référence filtre propre. Se lit directement contre le seuil :
+    # à 200 mbar il est temps de contre-laver. Négatif juste après un
+    # contre-lavage si la référence date d'un filtre déjà un peu chargé.
+    lambda: |-
+      if (!id(psi_running).has_state()) return {};
+      return (id(psi_running).state - id(num_psi_clean).state) * 1000.0f;
+
   - platform: template
     web_server:
       sorting_group_id: grp_etat
@@ -95,12 +153,59 @@ binary_sensor:
   - platform: template
     web_server:
       sorting_group_id: grp_etat
+      sorting_weight: 4
+    name: "Contre-lavage nécessaire"
+    id: bs_backwash
+    device_class: problem
+    icon: mdi:filter-remove
+    # L'encrassement est un phénomène lent : on exige 10 min au-dessus du seuil
+    # avant d'alerter, ce qui élimine les pointes transitoires au démarrage de
+    # la pompe ou lors d'une manœuvre de vanne.
+    filters:
+      - delayed_on: 10min
+      - delayed_off: 10min
+    lambda: |-
+      if (!id(psi_running).has_state()) return false;
+      return (id(psi_running).state - id(num_psi_clean).state) * 1000.0f
+             >= id(num_psi_clog).state;
+
+  - platform: template
+    web_server:
+      sorting_group_id: grp_etat
       sorting_weight: 40
     name: "Antigel actif"
     icon: mdi:snowflake-alert
     lambda: 'return id(antifreeze_on);'
 
 button:
+  # À presser juste APRÈS un contre-lavage, filtration relancée : c'est ce qui
+  # définit le « zéro » de l'encrassement. Sans ce geste, la référence reste à
+  # sa valeur par défaut et l'indicateur ne veut rien dire sur votre
+  # installation.
+  - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 3
+    name: "Filtre propre — enregistrer la référence"
+    icon: mdi:filter-check
+    on_press:
+      - lambda: |-
+          if (!id(filtration_pump).state ||
+              (millis() - id(filt_started_ms)) < 120000) {
+            ESP_LOGW("filtre", "Reference: lancez la filtration et attendez "
+                               "2 min que le regime s'etablisse");
+            return;
+          }
+          if (!id(psi_val).has_state()) {
+            ESP_LOGW("filtre", "Reference: pas de mesure de pression");
+            return;
+          }
+          auto c = id(num_psi_clean).make_call();
+          c.set_value(id(psi_val).state);
+          c.perform();
+          ESP_LOGI("filtre", "Reference filtre propre: %.2f bar",
+                   id(psi_val).state);
+
   - platform: template
     web_server:
       sorting_group_id: grp_reglages

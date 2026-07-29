@@ -4,7 +4,7 @@
 # L'interface web embarquée sur l'ESP32 est utile pour la mise en service, mais
 # elle reste sommaire : pas d'historique, donc pas de courbes. Les courbes
 # viennent de Home Assistant, qui enregistre tous les capteurs déclarant un
-# `state_class` — c'est le cas de 14 des 17 capteurs du portage.
+# `state_class` — c'est le cas de 16 des 19 capteurs du portage.
 #
 # Installation :
 #   Home Assistant -> Paramètres -> Tableaux de bord -> Ajouter un tableau
@@ -42,6 +42,8 @@ views:
         name: ORP
       - entity: binary_sensor.poolmaster_erreur_surpression
         name: Pression
+      - entity: binary_sensor.poolmaster_contre_lavage_necessaire
+        name: Filtre
       - entity: switch.poolmaster_arret_d_urgence_hors_filtration
         name: Urgence
 
@@ -119,6 +121,22 @@ views:
           - binary_sensor.poolmaster_bac_chlore_niveau_bas
           - binary_sensor.poolmaster_niveau_piscine_bas
 
+      # Encrassement : l'écart à la référence filtre propre se lit directement
+      # contre le seuil. À +200 mbar, il est temps de contre-laver.
+      - type: entities
+        title: Filtre
+        state_color: true
+        entities:
+          - entity: sensor.poolmaster_encrassement_du_filtre
+            name: Encrassement
+          - entity: binary_sensor.poolmaster_contre_lavage_necessaire
+            name: Contre-lavage nécessaire
+          - type: divider
+          - entity: sensor.poolmaster_pression_en_filtration
+            name: Pression en filtration
+          - entity: number.poolmaster_filtre_propre_pression_de_reference
+            name: Référence filtre propre
+
       - type: entities
         title: Alarmes
         state_color: true          # une alarme active passe en rouge
@@ -175,6 +193,17 @@ views:
         stat_types: [mean, max]
         entities:
           - sensor.poolmaster_pression_en_filtration
+
+      # La même chose exprimée en écart à la référence : la courbe monte depuis
+      # le dernier contre-lavage, et le seuil se lit à plat sur l'axe des mbar.
+      - type: history-graph
+        title: Encrassement depuis le dernier contre-lavage (60 jours)
+        hours_to_show: 1440
+        entities:
+          - entity: sensor.poolmaster_encrassement_du_filtre
+            name: Écart à la référence
+          - entity: number.poolmaster_seuil_d_encrassement
+            name: Seuil
 
       # Pression brute sur 48 h : utile au diagnostic, on y voit les cycles.
       - type: history-graph
@@ -316,6 +345,26 @@ views:
           - type: divider
           - number.poolmaster_ph_calibration_c0
           - number.poolmaster_ph_calibration_c1
+
+      # Le bouton se presse juste APRÈS un contre-lavage, filtration relancée
+      # depuis plus de 2 min : c'est ce geste qui définit le zéro de
+      # l'encrassement. Il refuse pompe à l'arrêt.
+      - type: entities
+        title: Filtre — contre-lavage
+        entities:
+          - entity: button.poolmaster_filtre_propre_enregistrer_la_reference
+            name: ⟳ Enregistrer la référence filtre propre
+          - entity: number.poolmaster_filtre_propre_pression_de_reference
+            name: Référence filtre propre
+          - entity: number.poolmaster_seuil_d_encrassement
+            name: Seuil d'encrassement
+          - type: divider
+          - entity: sensor.poolmaster_pression_en_filtration
+            name: Pression en filtration
+          - entity: sensor.poolmaster_encrassement_du_filtre
+            name: Encrassement
+          - entity: binary_sensor.poolmaster_contre_lavage_necessaire
+            name: Contre-lavage nécessaire
 
       - type: entities
         title: Sécurité
