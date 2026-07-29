@@ -376,6 +376,39 @@ Le verdict de fin est adapté au mode : en 1 point il commente le **décalage**
 obtenu (*normal*, *décalage important — nettoyez la sonde*, *décalage anormal —
 sonde probablement HS*) plutôt qu'une pente qui n'a pas bougé.
 
+#### Assistant pression guidé
+
+Une pression n'a pas de solution étalon : la seule référence disponible est le
+**manomètre du filtre**. L'assistant s'appuie donc sur les deux points que
+l'installation fournit d'elle-même, et **pilote la filtration** pour les
+obtenir.
+
+| Étape | Ce qui se passe | Ce que vous faites |
+|---|---|---|
+| Démarrage | l'assistant **arrête la filtration** | appuyer sur **Valider** |
+| 1/2 — zéro | la pression retombe à l'atmosphère, soit 0 bar relatif | attendre le retour à zéro, **Valider** |
+| — | l'assistant **redémarre la pompe** tout seul | — |
+| 2/2 — point haut | la pression monte | lire le manomètre, saisir la valeur, **Valider** |
+| Fin | régression 2 points, `C0`/`C1` écrits | rien |
+
+Le zéro ne demande aucune saisie : pompe à l'arrêt, la pression relative *est*
+nulle. C'est le point de référence le plus fiable dont on dispose.
+
+**La filtration est remise dans l'état où l'assistant l'a trouvée**, à la fin
+comme à l'annulation — il ne laisse pas l'installation dans un état que vous
+n'avez pas choisi.
+
+Deux points de vigilance, assumés plutôt que masqués :
+
+- **La sécurité surpression reste active.** Elle s'appuie justement sur le
+  capteur en cours d'étalonnage, donc un déclenchement intempestif est
+  possible si la calibration de départ est très fausse. Le statut le signale
+  alors explicitement, au lieu de désarmer une protection le temps de la
+  manipulation.
+- **Si la pompe s'arrête d'elle-même** pendant l'étape 2 — mode automatique
+  sortant de sa plage horaire, par exemple — le statut vous le dit et refuse
+  de valider un point faux.
+
 #### Mode manuel, point par point
 
 Utile pour l'ORP et la pression, ou pour un pH à un seul point. Les

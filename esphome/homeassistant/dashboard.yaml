@@ -271,6 +271,28 @@ views:
           - entity: number.poolmaster_etalonnage_orp_solution_2
             name: Solution 2
 
+      # L'assistant pilote la filtration : arrêt pour le zéro, marche pour le
+      # point haut, puis remise dans l'état initial.
+      - type: markdown
+        title: Étalonnage pression guidé
+        content: >
+          ## {{ states('sensor.poolmaster_etalonnage_pression') }}
+
+      - type: entities
+        title: Étalonnage pression — commandes
+        entities:
+          - entity: button.poolmaster_etalonnage_pression_valider
+            name: ▶ Valider l'étape
+          - entity: button.poolmaster_etalonnage_pression_annuler
+            name: ✕ Annuler
+          - type: divider
+          - entity: number.poolmaster_pression_reference_manometre
+            name: Lecture du manomètre (bar)
+          - entity: sensor.poolmaster_pression_filtration
+            name: Mesure actuelle
+          - entity: switch.poolmaster_pompe_filtration
+            name: Pompe filtration
+
       - type: entities
         title: Calibration pH — mode manuel
         entities:
