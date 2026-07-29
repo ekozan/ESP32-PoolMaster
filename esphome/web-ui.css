@@ -44,7 +44,7 @@ body {
 }
 
 /* L'élément hôte est stylable depuis l'extérieur : on lui donne une largeur
-   de lecture confortable au lieu de laisser les 110 entités s'étirer sur toute
+   de lecture confortable au lieu de laisser les 93 entités s'étirer sur toute
    la largeur d'un écran large. */
 esp-app {
   display: block;

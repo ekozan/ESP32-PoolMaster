@@ -4,14 +4,23 @@
 # Remplace la saisie manuelle des coefficients C0/C1 par une vraie calibration
 # faite depuis Home Assistant, l'interface web ou l'écran Nextion.
 #
-# Mode d'emploi, pour chaque sonde :
-#   1. Plonger la sonde dans une solution étalon (pH 7,01 ; pH 4,01 ; ORP 470 mV…)
-#      et attendre que la mesure soit stable.
-#   2. Saisir la valeur de l'étalon dans « … référence ».
-#   3. Bouton « … enregistrer le point ».
-#   4. Recommencer avec un second étalon (et jusqu'à 8 points).
-#   5. Bouton « … calculer la calibration » : la régression linéaire est faite
-#      à bord et écrit C0/C1.
+# DEUX FAÇONS DE PILOTER LE MÊME MOTEUR
+#
+# 1. Les ASSISTANTS GUIDÉS (affichés) — un texte de statut dit quoi faire, un
+#    bouton fait avancer. C'est la voie normale, elle couvre les trois sondes.
+#
+# 2. Le MODE MANUEL point par point (masqué par défaut) — on saisit la valeur
+#    de l'étalon, on appuie sur « enregistrer le point », on recommence
+#    jusqu'à 8 points, puis « calculer la calibration ». Les assistants
+#    alimentent exactement les mêmes tableaux et appellent les mêmes scripts
+#    cal_compute_* : le mode manuel n'apporte que la possibilité d'aller
+#    au-delà de 3 points ou d'utiliser des étalons non standard.
+#
+# Le mode manuel doublait chaque sonde de trois boutons et d'une consigne dans
+# l'interface, pour un usage rare. Il est donc `internal: true` par défaut :
+# le code reste, l'affichage disparaît. Pour le ressortir, passez
+# `masquer_calibration_experte: "false"` dans les substitutions du fichier
+# d'entrée et recompilez.
 #
 # Nombre de points :
 #   1 point   -> seul l'offset est corrigé, la pente est conservée. Utile pour
@@ -21,6 +30,12 @@
 # Les points sont conservés en NVS : ils survivent aux coupures et aux OTA, on
 # peut donc étaler une calibration sur plusieurs jours.
 # ==============================================================================
+
+# Valeur par défaut du drapeau, pour que ce paquet reste utilisable seul. Le
+# fichier d'entrée peut la surcharger : ses substitutions gagnent.
+substitutions:
+  masquer_calibration_experte: "true"
+
 globals:
   # --- Assistant d'étalonnage pH ---
   # 0 = au repos, 1..3 = tampon attendu, 9 = terminé.
@@ -126,7 +141,10 @@ number:
     mode: box
     entity_category: config
 
+  # Consigne du mode manuel seul : les assistants prennent la valeur de
+  # l'étalon dans « tampon 1..3 ». Masquée avec lui.
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 10
@@ -197,7 +215,10 @@ number:
     mode: box
     entity_category: config
 
+  # Idem pour l'ORP : consigne du mode manuel, masquée avec lui. L'assistant
+  # utilise « solution 1 » et « solution 2 ».
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 80
@@ -213,6 +234,10 @@ number:
     restore_value: true
     mode: box
     entity_category: config
+  # Celle-ci reste affichée : ce n'est pas une consigne de mode manuel, c'est
+  # la saisie que l'ASSISTANT pression réclame à l'étape 2/2 — il n'existe pas
+  # de « solution étalon » pour une pression, la seule référence est le
+  # manomètre du filtre.
   - platform: template
     web_server:
       sorting_group_id: grp_calibration
@@ -453,6 +478,7 @@ button:
 
   # --- pH, mode manuel point par point ---
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 20
@@ -475,6 +501,7 @@ button:
           ESP_LOGI("calib", "pH point %d: %.4f V -> %.2f", i + 1,
                    id(cal_ph_v)[i], id(cal_ph_ref)[i]);
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 30
@@ -483,6 +510,7 @@ button:
     on_press:
       - script.execute: cal_compute_ph
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 40
@@ -516,6 +544,7 @@ button:
 
   # --- ORP, mode manuel point par point ---
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 90
@@ -538,6 +567,7 @@ button:
           ESP_LOGI("calib", "ORP point %d: %.4f V -> %.0f mV", i + 1,
                    id(cal_orp_v)[i], id(cal_orp_ref)[i]);
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 100
@@ -546,6 +576,7 @@ button:
     on_press:
       - script.execute: cal_compute_orp
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 110
@@ -584,6 +615,7 @@ button:
 
   # --- Pression, mode manuel point par point ---
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 160
@@ -606,6 +638,7 @@ button:
           ESP_LOGI("calib", "PSI point %d: %.4f V -> %.2f bar", i + 1,
                    id(cal_psi_v)[i], id(cal_psi_ref)[i]);
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 170
@@ -614,6 +647,7 @@ button:
     on_press:
       - script.execute: cal_compute_psi
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 180

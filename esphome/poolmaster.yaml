@@ -40,6 +40,16 @@ substitutions:
   pin_nextion_tx: GPIO17   # Écran Nextion (Serial2 du firmware d'origine)
   pin_nextion_rx: GPIO16
 
+  # --- Affichage de la calibration experte ---
+  # Les assistants guidés suffisent à étalonner les trois sondes et écrivent
+  # eux-mêmes les coefficients. Le mode manuel point par point (enregistrer /
+  # calculer / effacer) et les coefficients C0/C1 sont donc masqués : ils
+  # encombraient l'interface et inviter à les modifier à la main ne peut que
+  # dégrader une calibration correcte. Le code reste compilé et fonctionnel.
+  # Passez à "false" pour les réafficher (diagnostic, étalons non standard,
+  # plus de 3 points).
+  masquer_calibration_experte: "true"
+
 packages:
   # --- Socle ---
   device:          !include packages/device.yaml      # carte, logger, diagnostics

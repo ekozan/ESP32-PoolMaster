@@ -165,8 +165,10 @@ web_server:
     username: !secret web_username
     password: !secret web_password
 
-  # Masque les entités `internal: true` (tensions ADS brutes, buzzer).
-  # Passez à `true` pour diagnostiquer une sonde.
+  # Masque les entités `internal: true` : tensions ADS brutes, buzzer, et
+  # la calibration experte (coefficients C0/C1, mode manuel point par point).
+  # Passez à `true` pour diagnostiquer une sonde — attention, cela ressort
+  # aussi les coefficients, qu'il vaut mieux laisser les assistants écrire.
   include_internal: false
 
   # `local: true` embarque le JS dans le firmware au lieu de le charger depuis

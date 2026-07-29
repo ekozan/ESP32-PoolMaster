@@ -4,8 +4,15 @@
 # Chaîne de mesure identique à l'origine : tension brute filtrée par une
 # médiane sur 11 échantillons, puis calibration linéaire
 #   valeur = tension(V) × C0 + C1
-# Les coefficients C0/C1 sont réglables depuis Home Assistant (fin de fichier).
+# Les coefficients C0/C1 sont calculés par les assistants d'étalonnage
+# (calibration.yaml) et masqués par défaut — voir la fin de ce fichier.
 # ==============================================================================
+
+# Valeur par défaut du drapeau, pour que ce paquet reste utilisable seul. Le
+# fichier d'entrée peut la surcharger : ses substitutions gagnent.
+substitutions:
+  masquer_calibration_experte: "true"
+
 sensor:
   # --- Tensions brutes ADS1115 (A0 = ORP, A1 = pH, A2 = PSI, gain 6.144 V) ---
   - platform: ads1115
@@ -148,8 +155,23 @@ sensor:
       - filter_out: nan
 
 # --- Calibration linéaire : valeur = tension(V) * C0 + C1 ---
+#
+# Ces six coefficients sont le RÉSULTAT de l'étalonnage, pas un réglage : les
+# assistants les écrivent eux-mêmes à la fin de la procédure. Les afficher
+# invitait à les modifier à la main, ce qui ne peut que dégrader une
+# calibration correcte — ils sont donc `internal: true` par défaut et
+# n'apparaissent ni dans Home Assistant ni dans l'interface web.
+#
+# Ils restent des `number` à part entière : la persistance en NVS, l'écriture
+# par make_call() depuis les assistants et la lecture par les lambdas
+# ci-dessus fonctionnent à l'identique. Seul l'affichage change.
+#
+# Pour les ressortir (report d'un certificat d'étalonnage, diagnostic), passez
+# `masquer_calibration_experte: "false"` dans les substitutions du fichier
+# d'entrée et recompilez.
 number:
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 60
@@ -164,6 +186,7 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 70
@@ -178,6 +201,7 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 130
@@ -192,6 +216,7 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 140
@@ -206,6 +231,7 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 200
@@ -220,6 +246,7 @@ number:
     mode: box
     entity_category: config
   - platform: template
+    internal: ${masquer_calibration_experte}
     web_server:
       sorting_group_id: grp_calibration
       sorting_weight: 210

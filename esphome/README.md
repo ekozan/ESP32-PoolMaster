@@ -172,11 +172,15 @@ nécessaire pour changer une consigne.
 
 | Type | Nombre | Exemples |
 |---|---|---|
-| `number` | 42 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, référence filtre propre et seuil d'encrassement, volumes et débits des bacs, coefficients C0/C1, valeurs des étalons de calibration |
+| `number` | 34 | consignes pH/ORP, Kp/Ki/Kd, fenêtres PID, heures de filtration, seuil de surpression, référence filtre propre et seuil d'encrassement, volumes et débits des bacs, tampons et solutions étalons des assistants |
 | `switch` | 17 | arrêt d'urgence, mode auto, mode hiver, pompes, PID pH/ORP, mode électrolyseur, relais R0/R1, buzzer |
-| `button` | 21 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, enregistrer la référence filtre propre, redémarrer, 5 boutons d'assistants guidés et 9 boutons de calibration manuelle (enregistrer / calculer / effacer × 3 sondes) |
+| `button` | 12 | acquitter les erreurs, bac rempli (×2), recalculer la filtration, enregistrer la référence filtre propre, redémarrer, et les 6 boutons des trois assistants d'étalonnage (avancer / annuler) |
 
-Les 42 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
+Onze entités de plus existent mais sont **masquées** par défaut : les six
+coefficients `C0`/`C1` et le mode de calibration manuel point par point. Voir
+[Mode manuel et coefficients C0/C1](#mode-manuel-et-coefficients-c0c1--masqués-par-défaut).
+
+Les 34 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
 `restore_value: true` : la valeur est écrite dans la partition `nvs` et
 survit aux coupures de courant comme aux mises à jour OTA. Les valeurs
 `initial_value` du YAML ne servent qu'au tout premier démarrage.
@@ -191,7 +195,7 @@ que de laisser un défaut ancien bloquer la régulation après un reboot.
 
 ### Interfaces : web embarquée et Home Assistant
 
-**Interface web embarquée** (port 80). Les 110 entités s'affichaient en une
+**Interface web embarquée** (port 80). Les 93 entités s'affichaient en une
 liste plate, ce qui rendait la page illisible. Elles sont maintenant réparties
 en huit sections via les groupes de tri de `web_server` version 3 :
 
@@ -470,17 +474,48 @@ Deux points de vigilance, assumés plutôt que masqués :
   sortant de sa plage horaire, par exemple — le statut vous le dit et refuse
   de valider un point faux.
 
-#### Mode manuel, point par point
+#### Mode manuel et coefficients C0/C1 — masqués par défaut
 
-Utile pour l'ORP et la pression, ou pour un pH à un seul point. Les
-coefficients `C0`/`C1` (`valeur = tension × C0 + C1`) sont calculés à bord.
-Pour chaque sonde :
+Les trois assistants couvrent les trois sondes et **écrivent eux-mêmes** les
+coefficients. Le mode manuel point par point et les `C0`/`C1` n'apparaissent
+donc **ni dans Home Assistant ni dans l'interface web** : onze entités qui
+encombraient l'écran pour un usage rare, et une invitation à retoucher des
+coefficients à la main — ce qui ne peut que dégrader une calibration correcte.
 
-1. plonger la sonde dans une solution étalon et attendre la stabilisation ;
-2. saisir la valeur de l'étalon dans « … référence » ;
-3. bouton « … enregistrer le point » ;
-4. recommencer avec un autre étalon (jusqu'à 8 points) ;
-5. bouton « … calculer la calibration ».
+Ce qui disparaît :
+
+| Entités masquées | |
+|---|---|
+| `… — enregistrer le point`, `… — calculer la calibration`, `… — effacer les points` | × 3 sondes |
+| `pH référence (solution étalon)`, `ORP référence (solution étalon)` | consignes du mode manuel seul |
+| `pH/ORP/PSI calibration C0` et `C1` | 6 coefficients |
+
+Ce qui **reste affiché** : les trois assistants, les tampons et solutions
+paramétrables, les compteurs de points, et `Pression référence (manomètre)` —
+cette dernière n'est pas une consigne de mode manuel, c'est la saisie que
+l'assistant pression réclame à l'étape 2/2.
+
+**Rien n'est supprimé.** Les entités sont `internal: true`, pas retirées : les
+coefficients restent des `number` persistés en NVS, écrits par les assistants
+et lus par les lambdas de mesure à l'identique. Seul l'affichage change.
+
+Pour tout ressortir — report d'un certificat d'étalonnage, étalons non
+standard, calibration à plus de 3 points — une substitution suffit dans le
+fichier d'entrée :
+
+```yaml
+substitutions:
+  masquer_calibration_experte: "false"
+```
+
+puis `esphome run`. Le défaut `"true"` est déclaré dans `measures.yaml` et
+`calibration.yaml`, si bien qu'un fichier d'entrée qui ne connaît pas ce
+drapeau compile sans rien changer.
+
+Le mode manuel, une fois réaffiché, fonctionne ainsi : plonger la sonde dans
+un étalon, attendre la stabilisation, saisir la valeur dans « … référence »,
+« … enregistrer le point », recommencer (jusqu'à 8 points), puis « … calculer
+la calibration ».
 
 | Points enregistrés | Traitement |
 |---|---|
@@ -491,7 +526,7 @@ Les points sont stockés en NVS : ils survivent aux coupures et aux OTA, une
 calibration peut donc s'étaler sur plusieurs jours. Le résultat est écrit via
 `make_call()` et non `publish_state()`, seul chemin qui déclenche la sauvegarde
 persistante des `number`. Un capteur de diagnostic indique le nombre de points
-enregistrés par sonde.
+enregistrés par sonde — il reste affiché, les assistants l'alimentent aussi.
 
 ### Écran Nextion
 

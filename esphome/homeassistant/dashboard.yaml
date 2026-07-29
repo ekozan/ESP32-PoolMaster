@@ -334,17 +334,18 @@ views:
           - entity: switch.poolmaster_pompe_filtration
             name: Pompe filtration
 
+      # Les assistants ci-dessus écrivent eux-mêmes les coefficients C0/C1 : ils
+      # ne sont pas exposés, pas plus que le mode manuel point par point. Pour
+      # les ressortir, `masquer_calibration_experte: "false"` côté ESPHome.
       - type: entities
-        title: Calibration pH — mode manuel
+        title: Calibration — points relevés
         entities:
-          - number.poolmaster_ph_reference_solution_etalon
-          - button.poolmaster_ph_enregistrer_le_point
-          - button.poolmaster_ph_calculer_la_calibration
-          - button.poolmaster_ph_effacer_les_points
-          - sensor.poolmaster_points_de_calibration_ph
-          - type: divider
-          - number.poolmaster_ph_calibration_c0
-          - number.poolmaster_ph_calibration_c1
+          - entity: sensor.poolmaster_points_de_calibration_ph
+            name: pH
+          - entity: sensor.poolmaster_points_de_calibration_orp
+            name: ORP
+          - entity: sensor.poolmaster_points_de_calibration_pression
+            name: Pression
 
       # Le bouton se presse juste APRÈS un contre-lavage, filtration relancée
       # depuis plus de 2 min : c'est ce geste qui définit le zéro de

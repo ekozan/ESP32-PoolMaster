@@ -1,7 +1,7 @@
 # ==============================================================================
 # Groupes de l'interface web embarquée
 # ==============================================================================
-# Sans groupes, les 110 entités s'affichent en une seule liste plate sur le
+# Sans groupes, les 93 entités s'affichent en une seule liste plate sur le
 # serveur web — c'est ce qui rend la page illisible. Ce paquet déclare les
 # sections ; chaque entité indique son appartenance dans son propre paquet :
 #
