@@ -63,7 +63,7 @@ packages:
 
     # Fréquence de re-vérification du dépôt distant. Sans effet si `ref:` est un
     # tag ou un SHA (le contenu ne bouge pas) — d'où l'intérêt d'épingler.
-    refresh: 1d
+    refresh: 1s
 
     files:
       # --- Socle (network.yaml volontairement absent, voir plus bas) ---
