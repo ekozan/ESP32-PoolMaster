@@ -234,7 +234,7 @@ manomètre retombe à zéro, et ce zéro ne dit rien de l'état du filtre.
 | Entité | Publie | À quoi elle sert |
 |---|---|---|
 | `Pression filtration` | en continu, toutes les 2 s | sécurité surpression, assistant d'étalonnage, lecture instantanée |
-| `Pression en filtration` | seulement pompe en marche depuis > 2 min | **tendance d'encrassement**, décision de contre-lavage |
+| `Pression en filtration` | toutes les 2 s, mais seulement pompe en marche depuis > 2 min | **tendance d'encrassement**, décision de contre-lavage |
 
 Le second ne publie rien hors de sa fenêtre — la dernière valeur valable est
 donc conservée. C'est lui qu'il faut tracer sur le long terme : la courbe du

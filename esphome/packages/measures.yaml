@@ -109,6 +109,12 @@ sensor:
   # que le régime s'établisse — même délai que la sécurité surpression. Hors de
   # cette fenêtre il ne publie rien du tout, donc la dernière valeur valable est
   # conservée : c'est LUI qu'il faut tracer pour décider d'un contre-lavage.
+  #
+  # Même cadence de 2 s que le capteur brut : on lit la pression de service en
+  # direct, sans attendre. Le coût est côté Home Assistant — un point toutes
+  # les 2 s dans l'historique pendant les heures de filtration. La courbe de
+  # tendance sur 60 jours, elle, s'appuie sur les statistiques long terme
+  # calculées à l'heure : elle est identique quelle que soit cette cadence.
   - platform: template
     web_server:
       sorting_group_id: grp_mesures
@@ -120,7 +126,7 @@ sensor:
     icon: mdi:filter
     accuracy_decimals: 2
     state_class: measurement
-    update_interval: 60s
+    update_interval: 2s
     lambda: |-
       if (!id(filtration_pump).state) return {};
       if ((millis() - id(filt_started_ms)) < 120000) return {};

@@ -107,6 +107,9 @@ sensor:
     icon: mdi:filter
     accuracy_decimals: 0
     state_class: measurement
+    # Volontairement à la minute, contrairement à la pression dont il dérive :
+    # l'encrassement est un phénomène de plusieurs semaines. Le publier toutes
+    # les 2 s ne montrerait rien de plus et remplirait l'historique.
     update_interval: 60s
     # Écart à la référence filtre propre. Se lit directement contre le seuil :
     # à 200 mbar il est temps de contre-laver. Négatif juste après un
