@@ -88,6 +88,10 @@ Toute la logique périodique passe par des `script:` appelés depuis
 couper la filtration : les traitements suivants doivent en tenir compte dans le
 même tick.
 
+Le détail de chaque tick, des deux boucles PID, de l'électrolyseur et du
+tableau des verrouillages est dans
+[Fonctionnement des boucles et des régulations](#fonctionnement-des-boucles-et-des-régulations).
+
 ### Remplacer la configuration réseau
 
 `exemple-webui-wifi-ota.yaml` est un second fichier d'entrée : il importe les
@@ -178,7 +182,7 @@ nécessaire pour changer une consigne.
 
 Onze entités de plus existent mais sont **masquées** par défaut : les six
 coefficients `C0`/`C1` et le mode de calibration manuel point par point. Voir
-[Mode manuel et coefficients C0/C1](#mode-manuel-et-coefficients-c0c1--masqués-par-défaut).
+la section « Mode manuel et coefficients C0/C1 — masqués par défaut ».
 
 Les 36 `number` sont tous en `optimistic: true` (modifiables depuis HA) **et**
 `restore_value: true` : la valeur est écrite dans la partition `nvs` et
@@ -868,6 +872,167 @@ Deux points en découlent :
 Les réglages persistants (consignes, calibrations, compteurs) vivent dans la
 partition `nvs` de 448 Ko et ne consomment rien sur le budget applicatif.
 
+## Fonctionnement des boucles et des régulations
+
+### Les boucles
+
+Tout le périodique passe par des `script:` appelés depuis `scheduler.yaml`,
+**seul endroit où l'ordre est décidé**.
+
+| Cadence | Enchaînement | Déclencheur |
+|---|---|---|
+| **1 s** | `safety_tick` → `ph_dosing_tick` → `orp_dosing_tick` → `swg_tick` → `robot_tick` | `interval:` |
+| **1 min** | `filtration_tick` → `regulation_tick` | `on_time` (s = 0) |
+| **15h05** | `compute_filtration_schedule` | `on_time` |
+| **00h00** | `daily_reset` | `on_time` |
+| **3 s** | LEDs PCF8574 + buzzer | `interval:` indépendant |
+
+`safety_tick` passe **en premier** parce qu'il arme les drapeaux d'erreur et
+peut couper la filtration : les quatre traitements suivants doivent le voir
+dans le même tick, pas au suivant.
+
+À côté, les capteurs ont leur propre cadence : ADS1115 **1 s** (médiane sur 11
+échantillons), valeurs calibrées et `Pression en filtration` **2 s**, DS18B20
+**10 s**, `Encrassement du filtre` et les compteurs **60 s**, textes des
+assistants d'étalonnage **2 s**.
+
+### Ce que fait chaque tick
+
+**`safety_tick` (1 s)** — quatre choses :
+
+1. **Surpression** — filtration en marche depuis > 2 min et pression au-dessus
+   du seuil → `psi_error`, pompe coupée.
+2. **Désamorçage** — pression sous la référence moins la marge pendant le délai
+   de garde → `prime_error`, pompe coupée.
+3. **Temps de marche** — incrémente les compteurs pH / Chlore / remplissage et
+   le volume consommé (`débit ÷ 3600` par seconde). Au-delà du plafond
+   quotidien : erreur, la pompe concernée est bloquée.
+4. **Arrêt d'urgence** — coupe la pompe de remplissage.
+
+**`filtration_tick` (1 min)** — antigel, puis marche/arrêt automatique.
+
+**`regulation_tick` (1 min)** — décide **quand** les PID ont le droit de
+tourner. Il ne dose rien lui-même.
+
+**`daily_reset` (minuit)** — remet à zéro les compteurs de marche et le drapeau
+« robot déjà passé ».
+
+### Filtration : une durée calculée, pas programmée
+
+À 15h05, d'après la température de l'eau :
+
+| Température de l'eau | Durée |
+|---|---|
+| < seuil bas (10 °C) | 2 h |
+| entre seuil bas et consigne | T ÷ 3 |
+| ≥ consigne (27 °C) | T ÷ 2 |
+
+La fenêtre est **centrée sur 15 h**, puis bornée par heure-min (8 h) et
+heure-max (22 h). En mode automatique la pompe suit cette fenêtre ; **en mode
+manuel, `filtration_tick` sort immédiatement** et ne touche à rien.
+
+**Antigel** : en mode hiver, air < −2 °C → marche forcée, relâchée seulement
+au-dessus de **+2 °C** (hystérésis reprise de l'origine). L'arrêt automatique
+est par ailleurs interdit tant que l'air est ≤ 2 °C.
+
+### pH et ORP : PID fenêtré (« PWM lent »)
+
+Les deux boucles sont identiques à un signe près. Au début de chaque fenêtre,
+le PID calcule **une durée de dosage en millisecondes** ; la pompe tourne
+pendant cette durée depuis le début de la fenêtre, puis s'arrête jusqu'à la
+suivante. `Kp` est donc en **ms de pompe par unité mesurée**.
+
+| | pH | ORP |
+|---|---|---|
+| Sens | REVERSE — `err = mesure − consigne` | DIRECT — `err = consigne − mesure` |
+| Pourquoi | l'acide fait *baisser* le pH : on dose quand on est **au-dessus** | le chlore fait *monter* l'ORP : on dose quand on est **en dessous** |
+| Consigne par défaut | 7,20 | 750 mV |
+| Fenêtre par défaut | 60 min | 30 min |
+| `Kp` par défaut | 2 700 000 (≈ 45 min de pompe pour 1 pH d'écart) | 2 500 |
+
+Trois garde-fous dans le calcul : sortie négative → **0 et intégrale remise à
+zéro** (anti-windup) ; sortie supérieure à la fenêtre → **plafonnée**, intégrale
+remise à zéro ; **dose < 30 s → 0**, une impulsion plus courte n'injectant rien
+d'utile.
+
+`Ki` et `Kd` valent **0** par défaut : la régulation est en pratique
+**proportionnelle pure**, comme le firmware d'origine.
+
+**Quand les PID tournent** (`regulation_tick`) — six conditions communes :
+
+```
+pas de mode hiver
+  ET eau ≥ seuil bas
+  ET filtration en marche
+  ET dans [début filtration + délai PID (15 min) ; fin filtration[
+  ET pas de surpression
+  ET pas d'arrêt d'urgence
+```
+
+plus, par boucle : pas d'erreur de temps de marche, et **bac non vide**. Le
+mode hiver force en outre l'extinction des deux PID.
+
+### Électrolyseur : tout ou rien sur la consigne ORP
+
+Actif si `Mode électrolyseur` **et** `Régulation ORP auto`. Il marche quand la
+filtration tourne depuis plus que le délai configuré (2 min), que l'eau est
+au-dessus de la température mini (15 °C), qu'il n'y a ni surpression ni arrêt
+d'urgence, **et que l'ORP est sous la consigne**.
+
+C'est un **tout ou rien sans hystérésis** : autour de la consigne, le relais
+peut basculer à chaque seconde. La médiane sur 11 échantillons de la sonde
+amortit fortement, mais le comportement est là — si vous entendez le relais
+claquer, c'est ça.
+
+Quand le mode électrolyseur est actif, **la pompe de chlore est verrouillée** :
+`orp_dosing_tick` teste `!sw_electrolyse_mode` et `regulation_tick` n'arme même
+pas le PID ORP. Les deux ne peuvent pas doser en même temps.
+
+### Robot : une fois par jour
+
+Mode automatique, filtration en marche, pas encore passé aujourd'hui : démarre
+**60 min** après le lancement de la filtration, tourne **90 min**, se marque
+« fait ». Le drapeau retombe à minuit. Coupé dès que la filtration s'arrête ou
+sur arrêt d'urgence.
+
+### Remplissage : aucune régulation
+
+**Il n'y a pas d'automatisation.** `Niveau piscine bas` est remonté comme
+capteur et affiché, mais **ne déclenche rien**. La pompe de remplissage est
+manuelle, avec deux protections seulement : le plafond de marche quotidien et
+la coupure par l'arrêt d'urgence. C'est le comportement du firmware d'origine.
+Pour un remplissage automatique, écrivez une automatisation Home Assistant sur
+`binary_sensor.…_niveau_piscine_bas` — en y mettant une durée maximale.
+
+### Qui bloque quoi
+
+| Verrou | Filtration | Pompe pH | Pompe Cl | Électrolyseur | Robot | Remplissage |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Filtration à l'arrêt | — | ✖ | ✖ | ✖ | ✖ | |
+| `psi_error` (surpression) | ✖ | ✖ | ✖ | ✖ | | |
+| `prime_error` (désamorçage) | ✖ | *(via pompe)* | *(via pompe)* | *(via pompe)* | *(via pompe)* | |
+| Arrêt d'urgence | | ✖ | ✖ | ✖ | ✖ | ✖ |
+| Bac vide | | ✖ | ✖ | | | |
+| Temps de marche dépassé | | ✖ | ✖ | | | ✖ |
+| Mode hiver | | ✖ | ✖ | ✖ | | |
+| Mode électrolyseur | | | ✖ | — | | |
+
+Le « via pompe » mérite une précision : `prime_error` n'apparaît pas dans les
+conditions de dosage, contrairement à `psi_error`. Ce n'est pas un oubli —
+quand il se lève, la filtration est coupée dans le même tick, et tous les
+dosages testent déjà l'état de la pompe de filtration. Le résultat est
+identique, par un chemin plus court.
+
+L'arrêt d'urgence, lui, **ne coupe pas la filtration** : garder la
+recirculation homogénéise ce qui a déjà été dosé et maintient des mesures
+pH/ORP représentatives pendant l'incident.
+
+### LEDs et buzzer (3 s, indépendant)
+
+Purement de l'affichage : WiFi, filtration, mode auto, PID pH, (PID ORP **ou**
+électrolyseur), bac bas, erreur, mode hiver. Le buzzer sonne si activé **et**
+qu'un bac est bas ou qu'une erreur quelconque est présente.
+
 ## Cible matérielle et version d'ESPHome
 
 `packages/device.yaml` déclare **la carte et la variante de puce** :
@@ -981,10 +1146,16 @@ OTA.
 
 ## Logique portée
 
+Cette liste dit **ce qui a été repris** du firmware d'origine et avec quelle
+fidélité. Pour le fonctionnement détaillé — enchaînement des ticks, calcul des
+PID, conditions d'activation, verrouillages — voir
+[Fonctionnement des boucles et des régulations](#fonctionnement-des-boucles-et-des-régulations).
+
 - **Mesures** : pH, ORP et pression avec calibration linéaire
-  `valeur = tension(V) × C0 + C1` — les coefficients C0/C1 sont des entités
-  `number` réglables depuis Home Assistant (mêmes valeurs par défaut que le
-  firmware d'origine). Filtrage médian sur 11 échantillons comme l'origine.
+  `valeur = tension(V) × C0 + C1` — mêmes coefficients par défaut que le
+  firmware d'origine, désormais écrits par les assistants d'étalonnage et
+  masqués (voir plus haut). Filtrage médian sur 11 échantillons comme
+  l'origine.
 - **Régulation pH/ORP** : PID fenêtré identique au principe d'origine
   (« PWM lent ») : à chaque fenêtre (60 min pH / 30 min ORP par défaut), la
   sortie PID donne une durée de dosage en ms exécutée en début de fenêtre.
@@ -1005,6 +1176,8 @@ OTA.
 - **Sécurités** :
   - surpression (arrêt général + erreur au-delà du seuil, mesuré après 2 min
     d'amorçage) ;
+  - **désamorçage** de la pompe de recirculation — ajout du portage, absent de
+    l'origine : coupure si la pression ne monte pas ;
   - temps de marche quotidien maximal des pompes doseuses ;
   - verrouillage des doseuses et du SWG sur la filtration ;
   - arrêt du dosage si bac vide (contact de niveau) ;
