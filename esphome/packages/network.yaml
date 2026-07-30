@@ -1,0 +1,37 @@
+# ==============================================================================
+# Réseau : WiFi, API Home Assistant, OTA, serveur web embarqué
+# ==============================================================================
+# Configuration minimale et raisonnable. Pour une installation réelle (IP fixe,
+# authentification du serveur web, puissance d'émission réduite…), voir
+# exemple-webui-wifi-ota.yaml qui remplace ce paquet.
+# ==============================================================================
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  # Point d'accès de secours si le WiFi est indisponible
+  ap:
+    ssid: "PoolMaster Fallback"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+
+  # Habillage de l'interface embarquée. Décommentez pour embarquer web-ui.css
+  # dans le firmware — ESPHome ajoute alors <link rel=stylesheet href=/0.css>
+  # à la page. Portée limitée : l'UI v3 est en web components, donc le fond de
+  # page et les variables CSS passent, mais pas le ciblage d'éléments internes.
+  # Lisez l'en-tête de web-ui.css avant d'y consacrer du temps.
+  # Chemin relatif au dossier de configuration (là où est poolmaster.yaml),
+  # pas au paquet — vérifié.
+  # css_include: web-ui.css

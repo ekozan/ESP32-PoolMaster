@@ -1,0 +1,349 @@
+# ==============================================================================
+# Écran Nextion — composant officiel ESPHome
+# ==============================================================================
+# ⚠ Ce paquet n'est PAS celui utilisé par défaut. Le défaut est
+# packages/nextion-uart-brut.yaml, qui fonctionne avec le HMI d'origine.
+#
+# Celui-ci exige des MODIFICATIONS DU FICHIER HMI dans Nextion Editor. Sans
+# elles, l'écran reste FIGÉ (problème de débit, voir plus bas) ou, si le débit
+# est déjà bon, affiche correctement mais les boutons restent sans effet.
+# La marche à suivre complète est dans esphome/README.md, section
+# « Écran Nextion ».
+#
+# Ce qu'il apporte en échange : mise à jour du .tft par WiFi, plateformes
+# `nextion` pour lier une entité à un composant de l'écran, déclencheurs de
+# veille. Pour l'activer, remplacez dans le bloc `packages:` :
+#     nextion:  !include packages/nextion.yaml
+#
+# ------------------------------------------------------------------------------
+# Sens ESP32 -> écran : AUCUNE modification du HMI nécessaire.
+#   Le composant envoie les mêmes commandes Nextion que le firmware d'origine
+#   (`globals.vapH.txt="7.20"`, `pageHome.vaPercArrowPH.val=73`…), donc toutes
+#   vos pages continuent de s'afficher comme avant.
+#
+# Sens écran -> ESP32 : c'est ici que le HMI doit changer.
+#   Le composant officiel réserve l'octet 0x23 — celui que le protocole
+#   EasyNextion utilise comme début de trame — pour le code d'erreur Nextion
+#   « nom de variable trop long ». Les `printh 23 02 53 XX` sont donc avalés
+#   comme des erreurs. On les remplace par le protocole « custom sensor »
+#   d'ESPHome, qui transporte un NOM plutôt qu'un identifiant de composant :
+#
+#       printh 91
+#       prints "filt_pump",0
+#       printh 00
+#       printh 03 00 00 00        <- valeur, 4 octets, petit-boutiste
+#       printh FF FF FF
+#
+#   Valeurs conventionnelles utilisées ici :
+#       0 = Arrêt   1 = Marche   2 = Auto   3 = Bascule
+#
+#   L'avantage sur les évènements tactiles standard (0x65) : pas besoin de
+#   relever les identifiants de composants page par page, et le HMI peut être
+#   réorganisé sans rien casser côté ESPHome.
+# ==============================================================================
+uart:
+  - id: nextion_uart
+    tx_pin: ${pin_nextion_tx}
+    rx_pin: ${pin_nextion_rx}
+    baud_rate: 115200
+    rx_buffer_size: 512
+
+globals:
+  - id: nx_page
+    type: int
+    initial_value: '0'
+
+display:
+  - platform: nextion
+    id: nx
+    uart_id: nextion_uart
+    update_interval: 1s
+
+    # ⚠ ÉCRAN FIGÉ ? C'est presque toujours ici.
+    # Le HMI doit être réglé à demeure sur 115200 : `bauds=115200` (avec un
+    # « s », la variante PERSISTANTE) dans Program.s. Le firmware d'origine
+    # utilisait `baud=115200`, la variante volatile, et renégociait le débit à
+    # chaque démarrage — l'écran repart donc à 9600 à chaque mise sous tension.
+    # Le composant officiel ne sait pas faire cette renégociation : il ouvre
+    # l'UART à 115200 et parle. Si l'écran est à 9600, il n'entend rien.
+    # Solution rapide sans toucher au HMI : packages/nextion-uart-brut.yaml.
+
+    # Si votre HMI utilise le mode « reparse » (recmod), décommentez :
+    # exit_reparse_on_start: true
+    # Si la poignée de main `connect`/`comok` perturbe votre HMI :
+    # skip_connection_handshake: true
+
+    # --- Mise à jour du .tft par WiFi (optionnel) ---------------------------
+    # Décommentez ces 4 lignes ET le bouton en fin de fichier : les deux vont
+    # ensemble, `upload_tft()` n'existe que si `tft_url` est défini (le code
+    # est sous #ifdef USE_NEXTION_TFT_UPLOAD).
+    #
+    # Hébergez le .tft dans le dossier `config/www/` de Home Assistant : il
+    # devient accessible sur http://<ha>:8123/local/<fichier>.tft
+    # Le fichier du dépôt est Nextion/tft/PoolMaster_Nextion_v6.tft (~2,4 Mo).
+    # Préférez une adresse IP à un nom .local, le mDNS depuis l'ESP32 étant
+    # moins fiable que depuis un PC.
+    #
+    # Ce que ça coûte : ESPHome réintègre le client HTTP de l'ESP-IDF
+    # (`esp_http_client`, exclu par défaut du build), donc firmware plus gros
+    # et compilation plus longue. Et en HTTPS la vérification du certificat est
+    # DÉSACTIVÉE (CONFIG_ESP_TLS_INSECURE) pour éviter d'embarquer une
+    # autorité — sans conséquence sur un réseau local, mais ne pointez pas
+    # cette URL vers Internet. Du simple HTTP sur le LAN est le plus sain.
+    #
+    # tft_url: "http://192.168.1.10:8123/local/poolmaster.tft"
+    # tft_upload_http_timeout: 15s
+    # tft_upload_http_retries: 5
+    # tft_upload_watchdog_timeout: 60s
+
+    on_setup:
+      then:
+        - script.execute: nx_push_config
+        - script.execute: nx_sync_rtc
+
+    # Page courante, annoncée par le `sendme` du Preinitialize Event du HMI.
+    on_page:
+      then:
+        - lambda: |-
+            id(nx_page) = x;
+            ESP_LOGD("nextion", "page %u", x);
+
+    # Actions utilisateur (trames 0x91 décrites en tête de fichier).
+    on_custom_sensor:
+      then:
+        - lambda: |-
+            // 0 = Arrêt, 1 = Marche, 2 = Auto, 3 = Bascule
+            auto apply = [&](switch_::Switch *sw) {
+              switch (value) {
+                case 0: sw->turn_off(); break;
+                case 1: sw->turn_on(); break;
+                default: sw->toggle(); break;
+              }
+            };
+            const std::string k = key;
+
+            if      (k == "auto_mode")   apply(id(sw_auto_mode));
+            else if (k == "winter_mode") apply(id(sw_winter_mode));
+            else if (k == "ph_auto")     apply(id(sw_ph_auto));
+            else if (k == "orp_auto")    apply(id(sw_orp_auto));
+            else if (k == "filt_pump")   apply(id(filtration_pump));
+            else if (k == "ph_pump")     apply(id(ph_pump));
+            else if (k == "chl_pump")    apply(id(chl_pump));
+            else if (k == "robot")       apply(id(robot_pump));
+            else if (k == "lights")      apply(id(relay_r0));
+            else if (k == "spare")       apply(id(relay_r1));
+            else if (k == "fill_pump")   apply(id(fill_pump));
+            else if (k == "swg_mode")    apply(id(sw_electrolyse_mode));
+            else if (k == "swg")         apply(id(swg_pump));
+            else if (k == "safe_stop")   apply(id(sw_safe_stop));
+            else if (k == "clear_alarms") {
+              id(psi_error) = false;
+              id(ph_uptime_error) = false;
+              id(chl_uptime_error) = false;
+              id(fill_uptime_error) = false;
+              id(prime_error) = false;
+              id(prime_low_s) = 0;
+              ESP_LOGI("nextion", "erreurs acquittees depuis l'ecran");
+            }
+            // Boutons de menu à trois états : la valeur 2 bascule le mode auto
+            // au lieu de piloter la pompe directement.
+            else if (k == "ph_pump_menu") {
+              if (value == 2) id(sw_ph_auto).toggle();
+              else { id(sw_ph_auto).turn_off(); apply(id(ph_pump)); }
+            } else if (k == "chl_pump_menu") {
+              if (value == 2) id(sw_orp_auto).toggle();
+              else { id(sw_orp_auto).turn_off(); apply(id(chl_pump)); }
+            } else if (k == "filt_pump_menu") {
+              if (value == 2) id(sw_auto_mode).toggle();
+              else { id(sw_auto_mode).turn_off(); apply(id(filtration_pump)); }
+            } else {
+              ESP_LOGW("nextion", "action inconnue '%s' (valeur %d)",
+                       k.c_str(), value);
+              return;
+            }
+            id(nx_push_switches)->execute();   // retour visuel immédiat
+
+    # ------------------------------------------------------------------------
+    # Rafraîchissement périodique : bitmap d'état + page Home.
+    # Les noms de variables sont ceux du firmware d'origine, le HMI les
+    # consomme sans modification.
+    # ------------------------------------------------------------------------
+    lambda: |-
+      // ---- Bitmap des 32 états ----
+      // Défini une seule fois dans le script nx_push_switches, qui est aussi
+      // appelé après chaque action de l'écran. Le dupliquer ici risquerait de
+      // faire diverger les deux copies.
+      id(nx_push_switches)->execute();
+
+      // ---- Page Home ----
+      // Splash (1) et Home (2) partagent les variables : la page Home est
+      // préchargée pendant le splash. 0 = aucune page encore annoncée.
+      const int p = id(nx_page);
+      if (p != 0 && p != 1 && p != 2) return;
+
+      auto t = id(sntp_time).now();
+      if (t.is_valid()) {
+        it.set_component_text_printf("globals.vaTime", "%02d:%02d:%02d",
+                                     t.hour, t.minute, t.second);
+        it.set_component_text_printf("globals.vaDate", "%02d/%02d/%02d",
+                                     t.day_of_month, t.month, t.year % 100);
+      }
+
+      const float ph  = id(ph_val).has_state()  ? id(ph_val).state  : 0.0f;
+      const float orp = id(orp_val).has_state() ? id(orp_val).state : 0.0f;
+      const float psi = id(psi_val).has_state() ? id(psi_val).state : 0.0f;
+      const float sp_ph  = id(num_ph_setpoint).state;
+      const float sp_orp = id(num_orp_setpoint).state;
+
+      it.set_component_text_printf("globals.vapH", "%4.2f", ph);
+      it.set_component_text_printf("globals.vaOrp", "%3.0f", orp);
+      if (id(water_temp).has_state())
+        it.set_component_text_printf("pageHome.vaWT", "%4.1f", id(water_temp).state);
+      if (id(air_temp).has_state())
+        it.set_component_text_printf("pageHome.vaAT", "%4.1f", id(air_temp).state);
+      it.set_component_text_printf("pageHome.vaPSI", "%4.2f", psi);
+
+      // Jauges : mêmes bornes que le firmware d'origine.
+      auto clampl = [](long v, long lo, long hi) {
+        return v < lo ? lo : (v > hi ? hi : v);
+      };
+      auto maplin = [](float x, float i0, float i1, float o0, float o1) {
+        if (i1 == i0) return (long) o0;
+        return (long)((x - i0) * (o1 - o0) / (i1 - i0) + o0);
+      };
+      it.set_component_value("pageHome.vaPercArrowPH",
+        clampl(maplin(ph, sp_ph - 0.5f, sp_ph + 0.5f, 0, 154), 0, 147));
+      it.set_component_value("pageHome.vaPercArrowORP",
+        clampl(maplin(orp, sp_orp - 50.0f, sp_orp + 50.0f, 0, 154), 0, 147));
+      if (id(water_temp).has_state())
+        it.set_component_value("pageHome.vaPercArrowT",
+          clampl(maplin(id(water_temp).state, id(num_water_low).state,
+                        id(num_water_setpoint).state, 37, 110), 0, 147));
+
+      // La pression a deux segments. Le firmware d'origine a un seuil médian
+      // configurable ; ici on prend la moitié du seuil de surpression, seul
+      // seuil exposé par le portage.
+      const float psi_med = id(num_psi_high).state * 0.5f;
+      if (psi <= psi_med)
+        it.set_component_value("pageHome.vaPercArrowP",
+          clampl(maplin(psi, 0.0f, psi_med, 0, 24), 0, 78));
+      else
+        it.set_component_value("pageHome.vaPercArrowP",
+          clampl(maplin(psi, psi_med, id(num_psi_high).state, 25, 63), 0, 78));
+
+      // Écarts pH / ORP : 0 dans la bande morte, 1 au-delà, 2 loin.
+      const float dph = fabsf(ph - sp_ph);
+      it.set_component_value("pageHome.vapHErr", dph <= 0.1f ? 0 : (dph <= 0.2f ? 1 : 2));
+      const float dorp = fabsf(orp - sp_orp);
+      it.set_component_value("pageHome.vaOrpErr", dorp <= 20.0f ? 0 : (dorp <= 40.0f ? 1 : 2));
+
+script:
+  # ----------------------------------------------------------------------------
+  # Bitmap des 32 états (équivalent de WriteSwitches() du firmware d'origine).
+  # Appelé à chaque cycle d'affichage et juste après une action de l'écran,
+  # pour un retour visuel immédiat. Les positions de bits sont figées dans le
+  # HMI : ne pas les réordonner.
+  # ----------------------------------------------------------------------------
+  - id: nx_push_switches
+    then:
+      - lambda: |-
+          uint32_t m = 0;
+          const bool net_ok = wifi::global_wifi_component->is_connected();
+          const bool ha_ok = api::global_api_server != nullptr &&
+                             api::global_api_server->is_connected();
+
+          m |= 1u                                       << 31;  // FullyLoaded
+          m |= 1u                                       << 30;  // BoardReady
+          m |= (net_ok ? 1u : 0u)                       << 29;
+          m |= (ha_ok ? 1u : 0u)                        << 28;
+          m |= 1u                                       << 27;
+          m |= (ha_ok ? 1u : 0u)                        << 26;
+          m |= (uint32_t)(id(ph_tank_low).state    ? 1 : 0) << 25;
+          m |= (uint32_t)(id(chl_tank_low).state   ? 1 : 0) << 24;
+          m |= (uint32_t)(id(psi_error)            ? 1 : 0) << 23;
+          m |= (uint32_t)(id(ph_uptime_error)      ? 1 : 0) << 22;
+          m |= (uint32_t)(id(chl_uptime_error)     ? 1 : 0) << 21;
+          m |= (uint32_t)(id(pool_level_low).state ? 1 : 0) << 20;
+          m |= (uint32_t)(id(sw_electrolyse_mode).state ? 1 : 0) << 16;
+          m |= (uint32_t)(id(fill_uptime_error)    ? 1 : 0) << 15;
+          m |= (uint32_t)(id(fill_pump).state      ? 1 : 0) << 14;
+          m |= (uint32_t)(id(sw_ph_pid).state      ? 1 : 0) << 13;
+          m |= (uint32_t)(id(sw_orp_pid).state     ? 1 : 0) << 12;
+          m |= (uint32_t)(id(ph_pump).state        ? 1 : 0) << 11;
+          m |= (uint32_t)(id(chl_pump).state       ? 1 : 0) << 10;
+          m |= (uint32_t)(id(sw_auto_mode).state   ? 1 : 0) <<  9;
+          m |= (uint32_t)(id(filtration_pump).state ? 1 : 0) <<  8;
+          m |= (uint32_t)(id(robot_pump).state     ? 1 : 0) <<  7;
+          m |= (uint32_t)(id(relay_r0).state       ? 1 : 0) <<  6;
+          m |= (uint32_t)(id(relay_r1).state       ? 1 : 0) <<  5;
+          m |= (uint32_t)(id(sw_winter_mode).state ? 1 : 0) <<  4;
+          m |= (uint32_t)(id(swg_pump).state       ? 1 : 0) <<  3;
+          m |= (uint32_t)(id(sw_electrolyse_mode).state ? 1 : 0) << 2;
+          m |= (uint32_t)(id(sw_ph_auto).state     ? 1 : 0) <<  1;
+          m |= (uint32_t)(id(sw_orp_auto).state    ? 1 : 0) <<  0;
+          id(nx)->send_command_printf("globals.vaSwitches.val=%u", (unsigned) m);
+
+  # ----------------------------------------------------------------------------
+  # Consignes : poussées au démarrage et une fois par minute.
+  # ----------------------------------------------------------------------------
+  - id: nx_push_config
+    then:
+      - lambda: |-
+          id(nx)->set_component_text_printf("globals.vaStaSto", "%02d-%02dh",
+                                            id(filt_start_h), id(filt_stop_h));
+          id(nx)->set_component_text_printf("globals.vapHSP",  "%3.1f", id(num_ph_setpoint).state);
+          id(nx)->set_component_text_printf("globals.vaOrpSP", "%3.0f", id(num_orp_setpoint).state);
+          id(nx)->set_component_text_printf("globals.vaWTSP",  "%3.0f", id(num_water_setpoint).state);
+          id(nx)->set_component_text_printf("globals.vaWTLT",  "%3.0f", id(num_water_low).state);
+          id(nx)->set_component_text_printf("globals.vaPSIMin", "%3.1f", 0.0f);
+          id(nx)->set_component_text_printf("globals.vaPSIMax", "%3.1f", id(num_psi_high).state);
+
+  # ----------------------------------------------------------------------------
+  # Horloge temps réel de l'écran, synchronisée depuis le NTP.
+  # ----------------------------------------------------------------------------
+  - id: nx_sync_rtc
+    then:
+      - lambda: |-
+          auto t = id(sntp_time).now();
+          if (!t.is_valid()) return;
+          id(nx)->send_command_printf("rtc0=%d", t.year);
+          id(nx)->send_command_printf("rtc1=%d", t.month);
+          id(nx)->send_command_printf("rtc2=%d", t.day_of_month);
+          id(nx)->send_command_printf("rtc3=%d", t.hour);
+          id(nx)->send_command_printf("rtc4=%d", t.minute);
+          id(nx)->send_command_printf("rtc5=%d", t.second);
+
+interval:
+  - interval: 60s
+    then:
+      - script.execute: nx_push_config
+      - script.execute: nx_sync_rtc
+
+# ==============================================================================
+# Mise à jour du .tft par WiFi (optionnel)
+# ==============================================================================
+# À décommenter EN MÊME TEMPS que le bloc `tft_url:` du composant ci-dessus.
+# Sans `tft_url`, `upload_tft()` n'est pas compilé et ce bouton casserait la
+# compilation.
+#
+# Le transfert dure plusieurs minutes et bloque la boucle principale : la
+# régulation est suspendue pendant ce temps. À lancer filtration à l'arrêt,
+# hors des plages de dosage.
+#
+# En cas d'échec en cours de transfert, l'écran peut rester en mode réception ;
+# il se récupère en rechargeant le .tft par carte SD — gardez cette porte de
+# sortie ouverte.
+# ==============================================================================
+# button:
+#   - platform: template
+#     name: "Mettre à jour l'écran Nextion"
+#     icon: mdi:file-upload
+#     entity_category: config
+#     on_press:
+#       - logger.log: "Nextion: debut du transfert TFT, regulation suspendue"
+#       - lambda: |-
+#           // baud_rate = 0 -> conserve le débit courant
+#           // exit_reparse = true -> sort du mode reparse avant l'envoi
+#           if (!id(nx)->upload_tft(0, true)) {
+#             ESP_LOGE("nextion", "Transfert TFT echoue");
+#           }

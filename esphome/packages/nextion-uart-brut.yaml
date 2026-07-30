@@ -1,0 +1,356 @@
+# ==============================================================================
+# Écran Nextion — protocole d'origine sur UART brut (paquet PAR DÉFAUT)
+# ==============================================================================
+# Fonctionne avec le fichier HMI d'origine, SANS aucune modification : on
+# reproduit exactement le protocole de l'ancien firmware sur un UART brut,
+# y compris la renégociation du débit au démarrage.
+#
+# C'est ce point-là qui justifie ce paquet comme défaut : le firmware d'origine
+# élevait le débit avec `baud=115200`, la commande VOLATILE — l'écran repart
+# donc à 9600 à chaque mise sous tension. Ce paquet rejoue la séquence
+# `rest` -> 9600 -> `baud=115200` -> 115200 à chaque démarrage, exactement
+# comme avant. Le composant officiel d'ESPHome, lui, ne sait pas le faire.
+#
+# L'alternative est packages/nextion.yaml (composant officiel ESPHome) : elle
+# apporte la mise à jour du .tft par WiFi et les entités liées aux composants
+# de l'écran, mais exige trois modifications du HMI dans Nextion Editor —
+# `bauds=115200` persistant, `sendme` au lieu de `printh 23 02 50 XX`, et des
+# trames `printh 91` nommées pour les boutons. Voir README.md.
+# ==============================================================================
+uart:
+  - id: nextion_uart
+    tx_pin: ${pin_nextion_tx}
+    rx_pin: ${pin_nextion_rx}
+    baud_rate: 115200
+    rx_buffer_size: 512
+
+globals:
+  - id: nx_buf                # tampon de réception des trames
+    type: std::vector<uint8_t>
+  - id: nx_page               # page actuellement affichée
+    type: int
+    initial_value: '0'
+  - id: nx_ready              # séquence d'initialisation terminée
+    type: bool
+    initial_value: 'false'
+
+esphome:
+  on_boot:
+    priority: -200            # après l'init de l'UART
+    then:
+      - script.execute: nx_init
+
+script:
+  # ----------------------------------------------------------------------------
+  # Réveil et resynchronisation du débit.
+  # Après un `rest`, l'écran repart à 9600 bauds : on repasse l'UART à 9600 pour
+  # lui ordonner 115200, puis on remonte. C'est la correction du firmware
+  # d'origine (commit 2a78607) — sans elle, la liaison est muette après reset.
+  # ----------------------------------------------------------------------------
+  - id: nx_init
+    then:
+      - lambda: |-
+          id(nx_send)->execute("sleep=0");
+          id(nx_send)->execute("rest");
+      - delay: 800ms
+      - lambda: |-
+          id(nextion_uart).set_baud_rate(9600);
+          id(nextion_uart).load_settings();
+      - lambda: 'id(nx_send)->execute("baud=115200");'
+      - delay: 150ms
+      - lambda: |-
+          id(nextion_uart).set_baud_rate(115200);
+          id(nextion_uart).load_settings();
+      - lambda: |-
+          id(nx_send)->execute("wup=1");    // sortie de veille sur la dernière page
+          id(nx_send)->execute("usup=1");   // réveil automatique sur données série
+          id(nx_send)->execute("page pageSplash");
+      - delay: 500ms
+      - lambda: 'id(nx_ready) = true;'
+      - script.execute: nx_push_config
+
+  # ----------------------------------------------------------------------------
+  # Envoi d'une commande brute, terminée par les trois 0xFF réglementaires.
+  # ----------------------------------------------------------------------------
+  - id: nx_send
+    parameters:
+      cmd: string
+    then:
+      - lambda: |-
+          static const uint8_t EOC[3] = {0xFF, 0xFF, 0xFF};
+          id(nextion_uart).write_str(cmd.c_str());
+          id(nextion_uart).write_array(EOC, 3);
+
+  # ----------------------------------------------------------------------------
+  # Valeurs de configuration : elles changent rarement, on ne les pousse qu'au
+  # démarrage et après une modification depuis Home Assistant.
+  # ----------------------------------------------------------------------------
+  - id: nx_push_config
+    then:
+      - lambda: |-
+          if (!id(nx_ready)) return;
+          char b[64];
+          auto S = [&](const char *fmt, auto... args) {
+            snprintf(b, sizeof(b), fmt, args...);
+            id(nx_send)->execute(std::string(b));
+          };
+          S("globals.vaStaSto.txt=\"%02d-%02dh\"", id(filt_start_h), id(filt_stop_h));
+          S("globals.vapHSP.txt=\"%3.1f\"",  id(num_ph_setpoint).state);
+          S("globals.vaOrpSP.txt=\"%3.0f\"", id(num_orp_setpoint).state);
+          S("globals.vaWTSP.txt=\"%3.0f\"",  id(num_water_setpoint).state);
+          S("globals.vaWTLT.txt=\"%3.0f\"",  id(num_water_low).state);
+          S("globals.vaPSIMin.txt=\"%3.1f\"", 0.0f);
+          S("globals.vaPSIMax.txt=\"%3.1f\"", id(num_psi_high).state);
+
+  # ----------------------------------------------------------------------------
+  # Bitmap des 32 états, poussé à chaque cycle comme dans WriteSwitches().
+  # Les positions de bits sont celles du firmware d'origine : le HMI les décode
+  # telles quelles, elles ne peuvent pas être réordonnées.
+  # ----------------------------------------------------------------------------
+  - id: nx_push_switches
+    then:
+      - lambda: |-
+          if (!id(nx_ready)) return;
+          uint32_t m = 0;
+          const bool net_ok = wifi::global_wifi_component->is_connected();
+
+          m |= 1u                                  << 31;  // FullyLoaded
+          m |= 1u                                  << 30;  // BoardReady
+          m |= (net_ok ? 1u : 0u)                  << 29;  // WifiReady
+          const bool ha_ok = api::global_api_server != nullptr &&
+                             api::global_api_server->is_connected();
+          m |= (uint32_t)(ha_ok ? 1 : 0)           << 28;  // MQTTReady -> API HA
+          m |= 1u                                  << 27;  // FullyLoaded (doublon d'origine)
+          m |= (uint32_t)(ha_ok ? 1 : 0)           << 26;  // MQTTConnection
+          m |= (uint32_t)(id(ph_tank_low).state    ? 1 : 0) << 25;
+          m |= (uint32_t)(id(chl_tank_low).state   ? 1 : 0) << 24;
+          m |= (uint32_t)(id(psi_error)            ? 1 : 0) << 23;
+          m |= (uint32_t)(id(ph_uptime_error)      ? 1 : 0) << 22;
+          m |= (uint32_t)(id(chl_uptime_error)     ? 1 : 0) << 21;
+          m |= (uint32_t)(id(pool_level_low).state ? 1 : 0) << 20;
+
+          m |= (uint32_t)(id(sw_electrolyse_mode).state ? 1 : 0) << 16;
+          m |= (uint32_t)(id(fill_uptime_error)    ? 1 : 0) << 15;
+          m |= (uint32_t)(id(fill_pump).state      ? 1 : 0) << 14;
+          m |= (uint32_t)(id(sw_ph_pid).state      ? 1 : 0) << 13;
+          m |= (uint32_t)(id(sw_orp_pid).state     ? 1 : 0) << 12;
+          m |= (uint32_t)(id(ph_pump).state        ? 1 : 0) << 11;
+          m |= (uint32_t)(id(chl_pump).state       ? 1 : 0) << 10;
+          m |= (uint32_t)(id(sw_auto_mode).state   ? 1 : 0) <<  9;
+          m |= (uint32_t)(id(filtration_pump).state ? 1 : 0) <<  8;
+          m |= (uint32_t)(id(robot_pump).state     ? 1 : 0) <<  7;
+          m |= (uint32_t)(id(relay_r0).state       ? 1 : 0) <<  6;
+          m |= (uint32_t)(id(relay_r1).state       ? 1 : 0) <<  5;
+          m |= (uint32_t)(id(sw_winter_mode).state ? 1 : 0) <<  4;
+          m |= (uint32_t)(id(swg_pump).state       ? 1 : 0) <<  3;
+          m |= (uint32_t)(id(sw_electrolyse_mode).state ? 1 : 0) << 2;
+          m |= (uint32_t)(id(sw_ph_auto).state     ? 1 : 0) <<  1;
+          m |= (uint32_t)(id(sw_orp_auto).state    ? 1 : 0) <<  0;
+
+          char b[48];
+          snprintf(b, sizeof(b), "globals.vaSwitches.val=%u", (unsigned) m);
+          id(nx_send)->execute(std::string(b));
+
+  # ----------------------------------------------------------------------------
+  # Mesures de la page Home + jauges. Reproduit les formules de mise à l'échelle
+  # du firmware d'origine (Nextion_Pages.cpp) : le HMI attend ces plages précises.
+  # ----------------------------------------------------------------------------
+  - id: nx_push_home
+    then:
+      - lambda: |-
+          if (!id(nx_ready)) return;
+          // Splash (1) et Home (2) partagent les mêmes variables : la page Home
+          // est préchargée pendant le splash pour éviter l'à-coup d'affichage.
+          // 0 = aucune page encore annoncée par l'écran.
+          const int p = id(nx_page);
+          if (p != 0 && p != 1 && p != 2) return;
+
+          char b[64];
+          auto S = [&](const char *fmt, auto... args) {
+            snprintf(b, sizeof(b), fmt, args...);
+            id(nx_send)->execute(std::string(b));
+          };
+          auto clampl = [](long v, long lo, long hi) {
+            return v < lo ? lo : (v > hi ? hi : v);
+          };
+          auto maplin = [](float x, float in0, float in1, float out0, float out1) {
+            if (in1 == in0) return (long) out0;
+            return (long)((x - in0) * (out1 - out0) / (in1 - in0) + out0);
+          };
+
+          auto t = id(sntp_time).now();
+          if (t.is_valid()) {
+            S("globals.vaTime.txt=\"%02d:%02d:%02d\"", t.hour, t.minute, t.second);
+            S("globals.vaDate.txt=\"%02d/%02d/%02d\"", t.day_of_month, t.month,
+              t.year % 100);
+          }
+
+          const float ph  = id(ph_val).has_state()  ? id(ph_val).state  : 0.0f;
+          const float orp = id(orp_val).has_state() ? id(orp_val).state : 0.0f;
+          const float psi = id(psi_val).has_state() ? id(psi_val).state : 0.0f;
+          const float sp_ph  = id(num_ph_setpoint).state;
+          const float sp_orp = id(num_orp_setpoint).state;
+
+          S("globals.vapH.txt=\"%4.2f\"", ph);
+          S("globals.vaOrp.txt=\"%3.0f\"", orp);
+          if (id(water_temp).has_state())
+            S("pageHome.vaWT.txt=\"%4.1f\"", id(water_temp).state);
+          if (id(air_temp).has_state())
+            S("pageHome.vaAT.txt=\"%4.1f\"", id(air_temp).state);
+          S("pageHome.vaPSI.txt=\"%4.2f\"", psi);
+
+          // Jauges : mêmes bornes que l'origine (0..154 écrêté à 147, etc.)
+          S("pageHome.vaPercArrowPH.val=%ld",
+            clampl(maplin(ph, sp_ph - 0.5f, sp_ph + 0.5f, 0, 154), 0, 147));
+          S("pageHome.vaPercArrowORP.val=%ld",
+            clampl(maplin(orp, sp_orp - 50.0f, sp_orp + 50.0f, 0, 154), 0, 147));
+          if (id(water_temp).has_state())
+            S("pageHome.vaPercArrowT.val=%ld",
+              clampl(maplin(id(water_temp).state, id(num_water_low).state,
+                            id(num_water_setpoint).state, 37, 110), 0, 147));
+
+          // La pression a deux segments : 0..seuil médian, puis seuil médian..max.
+          // Le firmware d'origine a un seuil médian configurable ; ici on prend
+          // la moitié du seuil de surpression, seul seuil exposé par le portage.
+          const float psi_med = id(num_psi_high).state * 0.5f;
+          if (psi <= psi_med)
+            S("pageHome.vaPercArrowP.val=%ld",
+              clampl(maplin(psi, 0.0f, psi_med, 0, 24), 0, 78));
+          else
+            S("pageHome.vaPercArrowP.val=%ld",
+              clampl(maplin(psi, psi_med, id(num_psi_high).state, 25, 63), 0, 78));
+
+          // Écarts pH / ORP : 0 dans la bande morte, 1 au-delà, 2 loin.
+          const float dph = fabsf(ph - sp_ph);
+          S("pageHome.vapHErr.val=%d", dph <= 0.1f ? 0 : (dph <= 0.2f ? 1 : 2));
+          const float dorp = fabsf(orp - sp_orp);
+          S("pageHome.vaOrpErr.val=%d", dorp <= 20.0f ? 0 : (dorp <= 40.0f ? 1 : 2));
+
+  # ----------------------------------------------------------------------------
+  # Synchronisation de l'horloge temps réel de l'écran depuis le NTP.
+  # ----------------------------------------------------------------------------
+  - id: nx_sync_rtc
+    then:
+      - lambda: |-
+          if (!id(nx_ready)) return;
+          auto t = id(sntp_time).now();
+          if (!t.is_valid()) return;
+          char b[32];
+          auto S = [&](const char *fmt, int v) {
+            snprintf(b, sizeof(b), fmt, v);
+            id(nx_send)->execute(std::string(b));
+          };
+          S("rtc5=%d", t.second);
+          S("rtc4=%d", t.minute);
+          S("rtc3=%d", t.hour);
+          S("rtc2=%d", t.day_of_month);
+          S("rtc1=%d", t.month);
+          S("rtc0=%d", t.year);
+
+interval:
+  # --- Réception des trames de l'écran -----------------------------------------
+  - interval: 100ms
+    then:
+      - lambda: |-
+          auto &v = id(nx_buf);
+          uint8_t byte;
+          while (id(nextion_uart).available()) {
+            id(nextion_uart).read_byte(&byte);
+            v.push_back(byte);
+            if (v.size() > 128) v.erase(v.begin());   // garde-fou anti-dérive
+          }
+
+          while (true) {
+            // Se recaler sur le caractère de début '#'
+            size_t i = 0;
+            while (i < v.size() && v[i] != '#') i++;
+            if (i > 0) v.erase(v.begin(), v.begin() + i);
+            if (v.size() < 2) break;
+
+            const uint8_t len = v[1];
+            if (len == 0 || len > 32) {          // trame absurde : on jette le '#'
+              v.erase(v.begin());
+              continue;
+            }
+            if (v.size() < (size_t) len + 2) break;   // trame incomplète, on attend
+
+            const uint8_t group = v[2];
+            const uint8_t nparam = len - 1;
+            const uint8_t p0 = nparam >= 1 ? v[3] : 0;
+            const uint8_t p1 = nparam >= 2 ? v[4] : 0;
+
+            if (group == 0x50) {                 // ENCT_PAGE
+              id(nx_page) = p0;
+              ESP_LOGD("nextion", "page %u", p0);
+            } else if (group == 0x53) {          // ENCT_ACTION
+              // Un paramètre = bascule, deux = consigne explicite.
+              const bool toggle = (nparam == 1);
+              const bool on = (p1 != 0);
+              auto set = [&](switch_::Switch *sw) {
+                if (toggle) sw->toggle(); else (on ? sw->turn_on() : sw->turn_off());
+              };
+              switch (p0) {
+                case 0:  set(id(sw_auto_mode)); break;         // ENMC_FILT_MODE
+                case 1:  set(id(sw_ph_auto)); break;           // ENMC_PH_AUTOMODE
+                case 2:  set(id(sw_orp_auto)); break;          // ENMC_ORP_AUTOMODE
+                case 4:  set(id(filtration_pump)); break;      // ENMC_FILT_PUMP
+                case 5:  set(id(ph_pump)); break;              // ENMC_PH_PUMP
+                case 6:  set(id(chl_pump)); break;             // ENMC_CHL_PUMP
+                case 8:  set(id(sw_winter_mode)); break;       // ENMC_WINTER_MODE
+                case 17: set(id(robot_pump)); break;           // ENMC_ROBOT
+                case 18: set(id(relay_r0)); break;             // ENMC_LIGHTS
+                case 19: set(id(relay_r1)); break;             // ENMC_SPARE
+                case 21: set(id(fill_pump)); break;            // ENMC_FILLING_PUMP
+                case 22: set(id(sw_electrolyse_mode)); break;  // ENMC_SWG_REGULATION
+                // Action 23 : ajout du portage, absente du firmware d'origine.
+                // Côté HMI : printh 23 02 53 17  (0x17 = 23, bascule)
+                case 23: set(id(sw_safe_stop)); break;         // arrêt d'urgence
+                case 20:                                       // ENMC_CLEAR_ALARMS
+                  id(psi_error) = false;
+                  id(ph_uptime_error) = false;
+                  id(chl_uptime_error) = false;
+                  id(fill_uptime_error) = false;
+                  id(prime_error) = false;
+                  id(prime_low_s) = 0;
+                  ESP_LOGI("nextion", "erreurs acquittees depuis l'ecran");
+                  break;
+                // Boutons de menu : valeur 2 = AUTO, sinon marche/arrêt direct.
+                case 11:                                       // ENMC_PH_PUMP_MENU
+                  if (p1 == 2) id(sw_ph_auto).toggle();
+                  else { id(sw_ph_auto).turn_off(); set(id(ph_pump)); }
+                  break;
+                case 12:                                       // ENMC_CHL_PUMP_MENU
+                  if (p1 == 2) id(sw_orp_auto).toggle();
+                  else { id(sw_orp_auto).turn_off(); set(id(chl_pump)); }
+                  break;
+                case 13:                                       // ENMC_FILT_PUMP_MENU
+                  if (p1 == 2) id(sw_auto_mode).toggle();
+                  else { id(sw_auto_mode).turn_off(); set(id(filtration_pump)); }
+                  break;
+                case 15:                                       // ENMC_SWG_MODE_MENU
+                  if (p1 == 2) id(sw_electrolyse_mode).toggle();
+                  else set(id(swg_pump));
+                  break;
+                default:
+                  ESP_LOGW("nextion", "action %u non portee (valeur %u)", p0, p1);
+                  break;
+              }
+              id(nx_push_switches)->execute();   // retour visuel immédiat
+            } else {
+              ESP_LOGD("nextion", "groupe 0x%02X ignore", group);
+            }
+
+            v.erase(v.begin(), v.begin() + len + 2);
+          }
+
+  # --- Rafraîchissement de l'affichage -----------------------------------------
+  - interval: 1s
+    then:
+      - script.execute: nx_push_switches
+      - script.execute: nx_push_home
+
+  # --- Consignes et horloge : peu fréquent -------------------------------------
+  - interval: 60s
+    then:
+      - script.execute: nx_push_config
+      - script.execute: nx_sync_rtc

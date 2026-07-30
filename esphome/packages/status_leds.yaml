@@ -1,0 +1,95 @@
+# ==============================================================================
+# LEDs de statut (PCF8574) et buzzer d'alarme
+# ==============================================================================
+# Équivalent de la tâche StatusLights du firmware d'origine. Les LEDs sont
+# actives à l'état bas, d'où `inverted: true`.
+# ==============================================================================
+output:
+  - platform: gpio
+    id: led_wifi
+    pin: { pcf8574: pcf_leds, number: 0, mode: OUTPUT, inverted: true }
+  - platform: gpio
+    id: led_filtration
+    pin: { pcf8574: pcf_leds, number: 1, mode: OUTPUT, inverted: true }
+  - platform: gpio
+    id: led_auto
+    pin: { pcf8574: pcf_leds, number: 2, mode: OUTPUT, inverted: true }
+  - platform: gpio
+    id: led_ph
+    pin: { pcf8574: pcf_leds, number: 3, mode: OUTPUT, inverted: true }
+  - platform: gpio
+    id: led_orp
+    pin: { pcf8574: pcf_leds, number: 4, mode: OUTPUT, inverted: true }
+  - platform: gpio
+    id: led_tank
+    pin: { pcf8574: pcf_leds, number: 5, mode: OUTPUT, inverted: true }
+  - platform: gpio
+    id: led_error
+    pin: { pcf8574: pcf_leds, number: 6, mode: OUTPUT, inverted: true }
+  - platform: gpio
+    id: led_winter
+    pin: { pcf8574: pcf_leds, number: 7, mode: OUTPUT, inverted: true }
+
+switch:
+  # ----------------------------------------------------------------------------
+  # Buzzer sur GPIO2. C'est une broche de « strapping » de l'ESP32 (avec 0, 5,
+  # 12 et 15) : son état est lu au démarrage pour choisir le mode de boot.
+  # Le brochage vient de la carte PoolMaster (include/Config.h du firmware
+  # d'origine, qui utilisait déjà cette broche) — ce n'est pas un choix du
+  # portage, et l'avertissement ESPHome est donc attendu ici. On le fait taire
+  # explicitement pour qu'il ne masque pas de vrais avertissements.
+  #
+  # Deux conséquences à connaître :
+  #  - GPIO2 doit être BAS (ou flottant) pour entrer en mode téléversement USB.
+  #    Si un jour l'ESP32 refuse de passer en mode flash par USB, débrancher le
+  #    buzzer est la première chose à essayer.
+  #  - Entre le reset et l'initialisation d'ESPHome, l'état de la broche n'est
+  #    pas maîtrisé : un bref bip au démarrage est normal.
+  # ----------------------------------------------------------------------------
+  - platform: gpio
+    pin:
+      number: ${pin_buzzer}
+      ignore_strapping_warning: true
+    id: buzzer_out
+    internal: true
+    restore_mode: ALWAYS_OFF
+
+  - platform: template
+    web_server:
+      sorting_group_id: grp_reglages
+      sorting_weight: 250
+    name: "Buzzer activé"
+    id: sw_buzzer_enabled
+    icon: mdi:volume-high
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_ON
+    entity_category: config
+
+interval:
+  # Rafraîchissement des LEDs et du buzzer toutes les 3 s. Indépendant de la
+  # boucle de régulation : purement de l'affichage.
+  - interval: 3s
+    then:
+      - lambda: |-
+          const bool net_ok = wifi::global_wifi_component->is_connected();
+          const bool tank_low = id(ph_tank_low).state || id(chl_tank_low).state;
+          const bool any_err = id(psi_error) || id(ph_uptime_error) ||
+                               id(chl_uptime_error) || id(fill_uptime_error) ||
+                               id(prime_error);
+
+          auto set_led = [](output::BinaryOutput *o, bool on) {
+            if (on) o->turn_on(); else o->turn_off();
+          };
+          set_led(id(led_wifi),       net_ok);
+          set_led(id(led_filtration), id(filtration_pump).state);
+          set_led(id(led_auto),       id(sw_auto_mode).state);
+          set_led(id(led_ph),         id(sw_ph_pid).state);
+          set_led(id(led_orp),        id(sw_orp_pid).state || id(swg_pump).state);
+          set_led(id(led_tank),       tank_low);
+          set_led(id(led_error),      any_err);
+          set_led(id(led_winter),     id(sw_winter_mode).state);
+
+          // Buzzer : alarme sonore si activé et défaut présent
+          const bool alarm = id(sw_buzzer_enabled).state && (tank_low || any_err);
+          if (alarm && !id(buzzer_out).state) id(buzzer_out).turn_on();
+          if (!alarm && id(buzzer_out).state) id(buzzer_out).turn_off();

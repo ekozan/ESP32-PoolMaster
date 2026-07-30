@@ -1,0 +1,73 @@
+# ==============================================================================
+# Appareil : carte, framework, journalisation et entités de diagnostic
+# ==============================================================================
+# Ne contient rien de lié au réseau : voir network.yaml. Cette séparation permet
+# à un fichier d'entrée de reprendre toute la logique piscine tout en
+# définissant lui-même son WiFi / OTA / serveur web (cf. exemple-webui-wifi-ota.yaml).
+# ==============================================================================
+esphome:
+  name: ${name}
+  friendly_name: ${friendly_name}
+  comment: "Gestion automatique de piscine (portage ESPHome de ESP32-PoolMaster)"
+  project:
+    name: "ekozan.esp32-poolmaster"
+    version: "ESPHome-1.0"
+
+  # Version minimale d'ESPHome. Valeur vérifiée : la configuration complète
+  # valide sous 2026.4.0. Sans cette ligne, ESPHome inscrit par défaut la
+  # version qui a généré le build, ce qui n'interdit jamais rien.
+  min_version: 2026.4.0
+
+  # Pas de suffixe MAC dans le nom d'hôte : l'appareil reste joignable en
+  # `poolmaster.local` quelle que soit la carte. À passer à `true` seulement si
+  # vous flashez plusieurs PoolMaster sur le même réseau.
+  name_add_mac_suffix: false
+
+  # Compilation séquentielle. Par défaut ESPHome lance autant de compilateurs
+  # que de cœurs ; sur l'add-on Home Assistant, plusieurs `cc1plus` en
+  # parallèle sur les grosses unités (api_server.cpp, web_server) épuisent la
+  # RAM et le noyau en tue un — la compilation s'arrête alors sur
+  # « Killed signal terminated program cc1plus », qui ressemble à une erreur de
+  # code mais n'en est pas une.
+  #
+  # Si vous compilez sur une machine avec beaucoup de RAM, montez cette valeur
+  # (ou supprimez la ligne) pour accélérer nettement la compilation. ccache est
+  # actif : seules les premières compilations sont longues.
+  compile_process_limit: 1
+
+esp32:
+  board: esp32doit-devkit-v1
+  # Variante déclarée en plus de la carte : ESPHome vérifie la cohérence des
+  # deux et refuse la configuration si elles divergent (« Option 'variant' does
+  # not match selected board »). C'est le garde-fou contre un binaire compilé
+  # pour une autre puce — la carte PoolMaster embarque un ESP32 classique
+  # (D0WDQ6), jamais un C3/C6/S3.
+  variant: esp32
+  framework:
+    type: esp-idf
+
+logger:
+  level: INFO
+
+sensor:
+  - platform: uptime
+    web_server:
+      sorting_group_id: grp_diagnostic
+      sorting_weight: 10
+    name: "Uptime"
+    entity_category: diagnostic
+  - platform: wifi_signal
+    web_server:
+      sorting_group_id: grp_diagnostic
+      sorting_weight: 20
+    name: "WiFi RSSI"
+    update_interval: 60s
+    entity_category: diagnostic
+
+button:
+  - platform: restart
+    web_server:
+      sorting_group_id: grp_diagnostic
+      sorting_weight: 50
+    name: "Redémarrer"
+    entity_category: diagnostic

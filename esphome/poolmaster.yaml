@@ -1,0 +1,95 @@
+# ==============================================================================
+# PoolMaster — Portage ESPHome
+# ==============================================================================
+# Réécriture ESPHome du firmware ESP32-PoolMaster (PlatformIO/Arduino).
+# Matériel identique : carte PoolMaster (ESP32 DevKit v1), ADS1115 (pH/ORP/PSI),
+# 2 bus OneWire DS18B20 (eau/air), PCF8574 (8 LEDs de statut), 8 relais,
+# 3 contacts de niveau (bac pH, bac Chlore, niveau piscine), buzzer.
+#
+# Ce fichier ne contient que ce qui dépend de VOTRE installation : le nom de
+# l'appareil et le brochage. Toute la logique est découpée en paquets
+# thématiques dans packages/ — un paquet = une fonction de la piscine, avec ses
+# entités *et* sa logique. Voir README.md pour la carte des paquets.
+#
+# Non porté (voir README.md) : écran Nextion (interface via Home Assistant),
+# API MQTT JSON historique (remplacée par l'API native ESPHome), notifications
+# SMTP (à faire côté Home Assistant).
+# ==============================================================================
+
+substitutions:
+  name: poolmaster
+  friendly_name: PoolMaster
+
+  # --- Brochage (identique à include/Config.h) ---
+  pin_filtration: GPIO32   # Pompe de filtration
+  pin_robot: GPIO33        # Pompe robot
+  pin_ph_pump: GPIO25      # Pompe péristaltique pH (acide)
+  pin_chl_pump: GPIO26     # Pompe péristaltique Chlore
+  pin_relay_r0: GPIO27     # Relais libre R0 (projecteur)
+  pin_relay_r1: GPIO4      # Relais libre R1
+  pin_swg: GPIO13          # Électrolyseur au sel (SWG)
+  pin_fill_pump: GPIO23    # Pompe de remplissage
+  pin_buzzer: GPIO2        # Buzzer
+  pin_chl_level: GPIO39    # Contact niveau bac Chlore (ouvert = niveau bas)
+  pin_ph_level: GPIO36     # Contact niveau bac pH (ouvert = niveau bas)
+  pin_pool_level: GPIO34   # Contact niveau piscine (ouvert = niveau bas)
+  pin_ow_air: GPIO18       # Bus OneWire température air
+  pin_ow_water: GPIO19     # Bus OneWire température eau
+  pin_sda: GPIO21
+  pin_scl: GPIO22
+  pin_nextion_tx: GPIO17   # Écran Nextion (Serial2 du firmware d'origine)
+  pin_nextion_rx: GPIO16
+
+  # --- Affichage de la calibration experte ---
+  # Les assistants guidés suffisent à étalonner les trois sondes et écrivent
+  # eux-mêmes les coefficients. Le mode manuel point par point (enregistrer /
+  # calculer / effacer) et les coefficients C0/C1 sont donc masqués : ils
+  # encombraient l'interface et inviter à les modifier à la main ne peut que
+  # dégrader une calibration correcte. Le code reste compilé et fonctionnel.
+  # Passez à "false" pour les réafficher (diagnostic, étalons non standard,
+  # plus de 3 points).
+  masquer_calibration_experte: "true"
+
+packages:
+  # --- Socle ---
+  device:          !include packages/device.yaml      # carte, logger, diagnostics
+  network:         !include packages/network.yaml     # WiFi, API, OTA, serveur web
+  buses:           !include packages/buses.yaml       # I2C, ADS1115, OneWire
+  state:           !include packages/state.yaml       # variables partagées
+  scheduler:       !include packages/scheduler.yaml   # horloge + ordre des ticks
+
+  # --- Mesures et modes ---
+  measures:        !include packages/measures.yaml    # pH, ORP, PSI, températures
+  calibration:     !include packages/calibration.yaml # calibration multi-points
+  modes:           !include packages/modes.yaml       # mode auto / mode hiver
+
+  # --- Fonctions de la piscine ---
+  filtration:      !include packages/filtration.yaml
+  regulation:      !include packages/regulation.yaml      # cadre commun pH/ORP
+  regulation_ph:   !include packages/regulation_ph.yaml
+  regulation_orp:  !include packages/regulation_orp.yaml
+  electrolyse:     !include packages/electrolyse.yaml
+  robot:           !include packages/robot.yaml
+  levels:          !include packages/levels.yaml          # bacs, niveau piscine
+  safety:          !include packages/safety.yaml
+  auxiliary:       !include packages/auxiliary.yaml       # relais libres
+
+  # --- Interface locale ---
+  status_leds:     !include packages/status_leds.yaml     # LEDs PCF8574 + buzzer
+  web_ui_groups:   !include packages/web-ui-groups.yaml   # sections de l'UI web
+  # Écran tactile. La variante « UART brut » est le défaut : elle fonctionne
+  # avec le fichier HMI d'origine, sans modification. Pour passer au composant
+  # officiel ESPHome (mise à jour du .tft par WiFi, entités liées), remplacez
+  # par packages/nextion.yaml — après avoir modifié le HMI, voir le README.
+  nextion:         !include packages/nextion-uart-brut.yaml
+
+# --- MQTT optionnel -----------------------------------------------------------
+# L'intégration Home Assistant passe par l'API native ESPHome (recommandé).
+# Décommentez ce bloc pour publier aussi vers un broker MQTT (Jeedom, NodeRed,
+# InfluxDB…). Les topics suivent la convention ESPHome (<name>/sensor/...),
+# pas l'API JSON historique Home/Pool/.
+# mqtt:
+#   broker: !secret mqtt_broker
+#   username: !secret mqtt_username
+#   password: !secret mqtt_password
+#   discovery: false

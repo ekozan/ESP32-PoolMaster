@@ -1,0 +1,388 @@
+# ==============================================================================
+# PoolMaster — tableau de bord Home Assistant
+# ==============================================================================
+# L'interface web embarquée sur l'ESP32 est utile pour la mise en service, mais
+# elle reste sommaire : pas d'historique, donc pas de courbes. Les courbes
+# viennent de Home Assistant, qui enregistre tous les capteurs déclarant un
+# `state_class` — c'est le cas de 16 des 19 capteurs du portage.
+#
+# Installation :
+#   Home Assistant -> Paramètres -> Tableaux de bord -> Ajouter un tableau
+#   de bord -> Nouveau tableau de bord à partir de zéro, puis, dans le menu
+#   « ⋮ » en haut à droite : « Modifier », « ⋮ » à nouveau, « Modifier en YAML »
+#   et coller ce fichier.
+#
+# ⚠ Les identifiants d'entités dérivent du nom de l'appareil. Avec
+# `name: poolmaster` (le défaut), le capteur « Température eau » devient
+# `sensor.poolmaster_temperature_eau`. Si vous avez renommé l'appareil,
+# remplacez le préfixe `poolmaster_` partout.
+# ==============================================================================
+title: Piscine
+
+# Thème appliqué à ce seul tableau de bord — le reste de Home Assistant garde
+# le vôtre. Copiez themes/poolmaster.yaml dans <config>/themes/ (voir son
+# en-tête), sinon cette ligne est simplement ignorée.
+theme: PoolMaster
+
+views:
+  # ----------------------------------------------------------------------------
+  - title: Vue d'ensemble
+    path: piscine
+    icon: mdi:pool
+
+    # Badges en haut de vue : ce qui doit sauter aux yeux sans faire défiler.
+    # `state_color` les colore selon l'état — rouge sur les `device_class:
+    # problem` actifs, grâce au thème.
+    badges:
+      - entity: sensor.poolmaster_temperature_eau
+        name: Eau
+      - entity: sensor.poolmaster_ph
+        name: pH
+      - entity: sensor.poolmaster_orp
+        name: ORP
+      - entity: binary_sensor.poolmaster_erreur_surpression
+        name: Pression
+      - entity: binary_sensor.poolmaster_contre_lavage_necessaire
+        name: Filtre
+      - entity: switch.poolmaster_arret_d_urgence_hors_filtration
+        name: Urgence
+
+    cards:
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            entity: sensor.poolmaster_ph
+            name: pH
+            min: 6.5
+            max: 8.5
+            needle: true
+            severity: { green: 7.0, yellow: 7.4, red: 7.8 }
+          - type: gauge
+            entity: sensor.poolmaster_orp
+            name: ORP
+            unit: mV
+            min: 400
+            max: 900
+            needle: true
+            severity: { red: 400, yellow: 600, green: 700 }
+
+      - type: horizontal-stack
+        cards:
+          - type: gauge
+            entity: sensor.poolmaster_temperature_eau
+            name: Eau
+            min: 0
+            max: 35
+            needle: true
+            # Vert à partir de la plage de baignade, ambre en dessous.
+            severity: { red: 0, yellow: 12, green: 22 }
+          - type: gauge
+            entity: sensor.poolmaster_pression_filtration
+            name: Pression
+            unit: bar
+            min: 0
+            max: 2
+            needle: true
+            # Le rouge démarre au seuil de surpression par défaut (1,0 bar).
+            severity: { green: 0, yellow: 0.8, red: 1.0 }
+
+      - type: glance
+        title: Températures
+        columns: 2
+        state_color: true
+        entities:
+          - entity: sensor.poolmaster_temperature_eau
+            name: Eau
+          - entity: sensor.poolmaster_temperature_air
+            name: Air
+
+      - type: entities
+        title: Commandes
+        state_color: true          # pompe en marche = icône turquoise
+        entities:
+          - switch.poolmaster_pompe_filtration
+          - switch.poolmaster_pompe_ph
+          - switch.poolmaster_pompe_chlore
+          - switch.poolmaster_electrolyseur
+          - switch.poolmaster_robot
+          - type: divider
+          - entity: switch.poolmaster_mode_automatique
+            name: Mode automatique
+          - entity: switch.poolmaster_arret_d_urgence_hors_filtration
+            name: ⛔ Arrêt d'urgence
+
+      - type: entities
+        title: Bacs et niveaux
+        state_color: true
+        entities:
+          - sensor.poolmaster_niveau_bac_ph
+          - sensor.poolmaster_niveau_bac_chlore
+          - binary_sensor.poolmaster_bac_ph_niveau_bas
+          - binary_sensor.poolmaster_bac_chlore_niveau_bas
+          - binary_sensor.poolmaster_niveau_piscine_bas
+
+      # Encrassement : l'écart à la référence filtre propre se lit directement
+      # contre le seuil. À +200 mbar, il est temps de contre-laver.
+      - type: entities
+        title: Filtre
+        state_color: true
+        entities:
+          - entity: sensor.poolmaster_encrassement_du_filtre
+            name: Encrassement
+          - entity: binary_sensor.poolmaster_contre_lavage_necessaire
+            name: Contre-lavage nécessaire
+          - type: divider
+          - entity: sensor.poolmaster_pression_en_filtration
+            name: Pression en filtration
+          - entity: number.poolmaster_filtre_propre_pression_de_reference
+            name: Référence filtre propre
+
+      - type: entities
+        title: Alarmes
+        state_color: true          # une alarme active passe en rouge
+        entities:
+          - binary_sensor.poolmaster_erreur_surpression
+          - entity: binary_sensor.poolmaster_erreur_desamorcage_pompe
+            name: Désamorçage — filtration coupée
+          - binary_sensor.poolmaster_erreur_temps_de_marche_pompe_ph
+          - binary_sensor.poolmaster_erreur_temps_de_marche_pompe_chlore
+          - binary_sensor.poolmaster_antigel_actif
+          - button.poolmaster_acquitter_les_erreurs
+
+  # ----------------------------------------------------------------------------
+  - title: Courbes
+    path: courbes
+    icon: mdi:chart-line
+    cards:
+      # pH avec sa consigne en surimpression : on voit d'un coup d'œil si la
+      # régulation tient, et l'effet de chaque dosage.
+      - type: history-graph
+        title: pH (48 h)
+        hours_to_show: 48
+        refresh_interval: 60
+        entities:
+          - entity: sensor.poolmaster_ph
+            name: pH mesuré
+          - entity: number.poolmaster_consigne_ph
+            name: Consigne
+
+      - type: history-graph
+        title: ORP (48 h)
+        hours_to_show: 48
+        refresh_interval: 60
+        entities:
+          - entity: sensor.poolmaster_orp
+            name: ORP mesuré
+          - entity: number.poolmaster_consigne_orp
+            name: Consigne
+
+      - type: history-graph
+        title: Températures (7 jours)
+        hours_to_show: 168
+        entities:
+          - entity: sensor.poolmaster_temperature_eau
+            name: Eau
+          - entity: sensor.poolmaster_temperature_air
+            name: Air
+
+      # Indicateur de contre-lavage. On trace « Pression en filtration », qui
+      # ne publie QUE lorsque la pompe de recirculation tourne depuis plus de
+      # 2 min : la pression brute retomberait à zéro entre les cycles et la
+      # tendance d'encrassement serait noyée dans les arrêts de pompe.
+      - type: statistics-graph
+        title: Pression en filtration — tendance d'encrassement (60 jours)
+        days_to_show: 60
+        stat_types: [mean, max]
+        entities:
+          - sensor.poolmaster_pression_en_filtration
+
+      # La même chose exprimée en écart à la référence : la courbe monte depuis
+      # le dernier contre-lavage, et le seuil se lit à plat sur l'axe des mbar.
+      - type: history-graph
+        title: Encrassement depuis le dernier contre-lavage (60 jours)
+        hours_to_show: 1440
+        entities:
+          - entity: sensor.poolmaster_encrassement_du_filtre
+            name: Écart à la référence
+          - entity: number.poolmaster_seuil_d_encrassement
+            name: Seuil
+
+      # Pression brute sur 48 h : utile au diagnostic, on y voit les cycles.
+      - type: history-graph
+        title: Pression brute (48 h)
+        hours_to_show: 48
+        entities:
+          - entity: sensor.poolmaster_pression_filtration
+            name: Pression brute
+          - entity: switch.poolmaster_pompe_filtration
+            name: Recirculation
+
+      - type: history-graph
+        title: Consommation des bacs (30 jours)
+        hours_to_show: 720
+        entities:
+          - sensor.poolmaster_niveau_bac_ph
+          - sensor.poolmaster_niveau_bac_chlore
+
+      - type: history-graph
+        title: Marche des pompes doseuses (7 jours)
+        hours_to_show: 168
+        entities:
+          - sensor.poolmaster_marche_pompe_ph_aujourd_hui
+          - sensor.poolmaster_marche_pompe_chlore_aujourd_hui
+
+      # Statistiques long terme : moyenne/min/max par jour, disponible dès que
+      # `state_class: measurement` est déclaré — c'est le cas de ces capteurs.
+      - type: statistics-graph
+        title: pH — moyenne, min et max par jour
+        days_to_show: 30
+        stat_types: [mean, min, max]
+        entities:
+          - sensor.poolmaster_ph
+
+      - type: statistics-graph
+        title: Température de l'eau — par jour
+        days_to_show: 90
+        stat_types: [mean, min, max]
+        entities:
+          - sensor.poolmaster_temperature_eau
+
+  # ----------------------------------------------------------------------------
+  - title: Réglages
+    path: reglages
+    icon: mdi:tune
+    cards:
+      - type: entities
+        title: Consignes
+        entities:
+          - number.poolmaster_consigne_ph
+          - number.poolmaster_consigne_orp
+          - number.poolmaster_consigne_temperature_eau
+          - number.poolmaster_seuil_temperature_eau_basse
+
+      - type: entities
+        title: Filtration
+        entities:
+          - number.poolmaster_filtration_heure_min
+          - number.poolmaster_filtration_heure_max
+          - sensor.poolmaster_filtration_debut
+          - sensor.poolmaster_filtration_fin
+          - sensor.poolmaster_filtration_duree
+          - button.poolmaster_recalculer_la_plage_de_filtration
+
+      # L'assistant tient en deux lignes : on lit la consigne, on appuie.
+      # Le texte dit quel tampon utiliser, affiche la tension en direct pour
+      # juger de la stabilisation, puis annonce le résultat et l'état de la
+      # sonde.
+      - type: markdown
+        title: Étalonnage pH guidé
+        content: >
+          ## {{ states('sensor.poolmaster_etalonnage_ph') }}
+
+      - type: entities
+        title: Étalonnage pH — commandes
+        entities:
+          - entity: button.poolmaster_etalonnage_ph_point_suivant
+            name: ▶ Démarrer / point suivant
+          - entity: button.poolmaster_etalonnage_ph_annuler
+            name: ✕ Annuler
+          - type: divider
+          - entity: number.poolmaster_etalonnage_ph_tampon_1
+            name: Tampon 1
+          - entity: number.poolmaster_etalonnage_ph_tampon_2
+            name: Tampon 2
+          - entity: number.poolmaster_etalonnage_ph_tampon_3
+            name: Tampon 3
+
+      - type: markdown
+        title: Étalonnage ORP guidé
+        content: >
+          ## {{ states('sensor.poolmaster_etalonnage_orp') }}
+
+      - type: entities
+        title: Étalonnage ORP — commandes
+        entities:
+          - entity: button.poolmaster_etalonnage_orp_point_suivant
+            name: ▶ Démarrer / point suivant
+          - entity: button.poolmaster_etalonnage_orp_annuler
+            name: ✕ Annuler
+          - type: divider
+          - entity: number.poolmaster_etalonnage_orp_nombre_de_solutions
+            name: Nombre de solutions
+          - entity: number.poolmaster_etalonnage_orp_solution_1
+            name: Solution 1
+          - entity: number.poolmaster_etalonnage_orp_solution_2
+            name: Solution 2
+
+      # L'assistant pilote la filtration : arrêt pour le zéro, marche pour le
+      # point haut, puis remise dans l'état initial.
+      - type: markdown
+        title: Étalonnage pression guidé
+        content: >
+          ## {{ states('sensor.poolmaster_etalonnage_pression') }}
+
+      - type: entities
+        title: Étalonnage pression — commandes
+        entities:
+          - entity: button.poolmaster_etalonnage_pression_valider
+            name: ▶ Valider l'étape
+          - entity: button.poolmaster_etalonnage_pression_annuler
+            name: ✕ Annuler
+          - type: divider
+          - entity: number.poolmaster_pression_reference_manometre
+            name: Lecture du manomètre (bar)
+          - entity: sensor.poolmaster_pression_filtration
+            name: Mesure actuelle
+          - entity: switch.poolmaster_pompe_filtration
+            name: Pompe filtration
+
+      # Les assistants ci-dessus écrivent eux-mêmes les coefficients C0/C1 : ils
+      # ne sont pas exposés, pas plus que le mode manuel point par point. Pour
+      # les ressortir, `masquer_calibration_experte: "false"` côté ESPHome.
+      - type: entities
+        title: Calibration — points relevés
+        entities:
+          - entity: sensor.poolmaster_points_de_calibration_ph
+            name: pH
+          - entity: sensor.poolmaster_points_de_calibration_orp
+            name: ORP
+          - entity: sensor.poolmaster_points_de_calibration_pression
+            name: Pression
+
+      # Le bouton se presse juste APRÈS un contre-lavage, filtration relancée
+      # depuis plus de 2 min : c'est ce geste qui définit le zéro de
+      # l'encrassement. Il refuse pompe à l'arrêt.
+      - type: entities
+        title: Filtre — contre-lavage
+        entities:
+          - entity: button.poolmaster_filtre_propre_enregistrer_la_reference
+            name: ⟳ Enregistrer la référence filtre propre
+          - entity: number.poolmaster_filtre_propre_pression_de_reference
+            name: Référence filtre propre
+          - entity: number.poolmaster_seuil_d_encrassement
+            name: Seuil d'encrassement
+          - type: divider
+          - entity: sensor.poolmaster_pression_en_filtration
+            name: Pression en filtration
+          - entity: sensor.poolmaster_encrassement_du_filtre
+            name: Encrassement
+          - entity: binary_sensor.poolmaster_contre_lavage_necessaire
+            name: Contre-lavage nécessaire
+
+      # Le désamorçage se compte vers le BAS depuis la référence filtre propre,
+      # l'encrassement vers le haut : les deux encadrent la pression normale.
+      # La protection reste inactive tant que la référence n'a pas été relevée.
+      - type: entities
+        title: Sécurité
+        entities:
+          - number.poolmaster_seuil_surpression
+          - type: divider
+          - entity: number.poolmaster_seuil_de_desamorcage
+            name: Seuil de désamorçage (sous la référence)
+          - entity: number.poolmaster_delai_de_desamorcage
+            name: Délai avant coupure
+          - entity: binary_sensor.poolmaster_erreur_desamorcage_pompe
+            name: Erreur désamorçage
+          - type: divider
+          - number.poolmaster_marche_max_quotidienne_pompes_doseuses
+          - switch.poolmaster_arret_d_urgence_hors_filtration

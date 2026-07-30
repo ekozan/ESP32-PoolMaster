@@ -1,0 +1,80 @@
+/* ==========================================================================
+   PoolMaster — habillage de l'interface web embarquée
+   ==========================================================================
+   Activé par `css_include: web-ui.css` dans packages/network.yaml (ligne
+   commentée par défaut). ESPHome compresse ce fichier et l'embarque dans le
+   firmware, puis ajoute <link rel=stylesheet href=/0.css> dans la page.
+
+   ⚠ CE QUI MARCHE ET CE QUI NE MARCHE PAS
+
+   L'interface v3 est construite en *web components* : l'essentiel du rendu se
+   trouve dans un shadow DOM que le CSS ordinaire ne traverse pas. Concrètement :
+
+     ✔ le fond de page, la police, les marges, le titre — hors shadow DOM ;
+     ✔ les variables CSS (`--nom`) déclarées ici : elles franchissent la
+       frontière du shadow DOM par héritage… mais seulement si le composant
+       consomme ce nom précis ;
+     ✘ cibler un élément interne (`.card`, `table`, `button`…) : sans effet.
+
+   Les noms de variables ci-dessous ne sont PAS vérifiés — le bundle v3 est
+   servi depuis oi.esphome.io et n'a pas pu être inspecté. Pour trouver les
+   vrais noms : ouvrez l'interface, F12, sélectionnez <esp-app>, onglet
+   « Computed », filtrez sur « -- ». Les variables inutiles ici sont
+   simplement ignorées, elles ne cassent rien.
+
+   Pour un habillage vraiment libre, c'est Home Assistant qu'il faut viser :
+   voir homeassistant/themes/poolmaster.yaml.
+   ========================================================================== */
+
+/* --- Garanti : la page elle-même ---------------------------------------- */
+body {
+  margin: 0;
+  padding: 1.2rem 1rem 2rem;
+  background: linear-gradient(180deg, #eef6fb 0%, #dcecf6 100%);
+  color: #0b2b3c;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    background: linear-gradient(180deg, #0b1b24 0%, #102734 100%);
+    color: #e6f3fa;
+  }
+}
+
+/* L'élément hôte est stylable depuis l'extérieur : on lui donne une largeur
+   de lecture confortable au lieu de laisser les 96 entités s'étirer sur toute
+   la largeur d'un écran large. */
+esp-app {
+  display: block;
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* --- Variables : héritées dans le shadow DOM si le composant les utilise -- */
+:root {
+  --primary-color: #0288d1;
+  --accent-color: #00bfa5;
+  --primary-text-color: #0b2b3c;
+  --secondary-text-color: #4a6b7c;
+  --card-background-color: #ffffff;
+  --divider-color: rgba(2, 136, 209, 0.14);
+  --error-color: #d32f2f;
+  --warning-color: #f57c00;
+  --success-color: #2e7d32;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --primary-color: #29b6f6;
+    --accent-color: #1de9b6;
+    --primary-text-color: #e6f3fa;
+    --secondary-text-color: #9fbecd;
+    --card-background-color: #14313f;
+    --divider-color: rgba(41, 182, 246, 0.2);
+    --error-color: #ef5350;
+    --warning-color: #ffa726;
+    --success-color: #66bb6a;
+  }
+}

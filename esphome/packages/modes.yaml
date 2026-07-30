@@ -1,0 +1,28 @@
+# ==============================================================================
+# Modes de fonctionnement généraux de l'installation
+# ==============================================================================
+# Équivalents des commandes MQTT {"Mode":x} et {"Winter":x} de l'origine.
+# Les modes propres à une fonction (régulation pH/ORP, électrolyseur, buzzer)
+# sont déclarés dans le paquet de la fonction concernée.
+# ==============================================================================
+switch:
+  - platform: template
+    web_server:
+      sorting_group_id: grp_regulation
+      sorting_weight: 10
+    name: "Mode automatique"
+    id: sw_auto_mode
+    icon: mdi:refresh-auto
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
+  - platform: template
+    web_server:
+      sorting_group_id: grp_regulation
+      sorting_weight: 20
+    name: "Mode hiver"
+    id: sw_winter_mode
+    icon: mdi:snowflake
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    entity_category: config
